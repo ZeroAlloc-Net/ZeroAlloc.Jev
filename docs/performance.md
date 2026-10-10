@@ -357,8 +357,8 @@ measurement plus about 10%, rounded up to the next 64 B, per the Phase 1.8 rule.
 | `NeutralEvaluateRoundTripWhileListening` | The same call with a span and metric listener attached | 4616 B | 5120 B |
 | `BareTransportRoundTrip` | The same call with `UseStandardPipeline` off, the transport alone | 3248 B | 3584 B |
 | `PassThroughStage` | A `DelegatingDecisionClient` that overrides nothing, over an inner call that completes synchronously | 0 B | 0 B |
-| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call | 3704 B | 4096 B |
-| `TypedStateEvaluateRoundTrip` | A typed `EvaluateAsync<T, TState>` call, over a one-question response | 3008 B | 3328 B |
+| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call | 3424 B | 4096 B |
+| `TypedStateEvaluateRoundTrip` | A typed `EvaluateAsync<T, TState>` call, over a one-question response | 3016 B | 3328 B |
 
 What each one allocates:
 
@@ -371,11 +371,13 @@ What each one allocates:
   `ValueTask` as it is, so `PassThroughStage` is budgeted at exactly 0 B.
 - **Listening** adds the `Activity`, its boxed start tags, the boxed tag and measurement values and each metric's
   `TagList`: 1368 B over the idle call. A typed call pays the same 1368 B, 4792 B against 3424 B.
-- **The UTF-8 state** costs `TypedEvaluateRoundTrip`'s 3424 B plus the `JsonDocument` that
-  `DecisionContent.FromUtf8Json` parses the state into, 280 B.
+- **The UTF-8 state** costs nothing: the request keeps the caller's array and the request writer copies its bytes, so
+  the call measures `TypedEvaluateRoundTrip`'s 3424 B. Its 4096 B budget was set over the 3704 B it measured while it
+  parsed the state into a 280 B `JsonDocument`.
 - **The typed state** costs the transport's request and response, the `DecisionResponse`, the result record, and the
-  `JsonDocument` that `DecisionContent.FromValue` serializes the state into, which `ContentFromValue` measures at 280 B
-  for the same state. The text and `JsonElement` overloads do not pay for a `JsonDocument`.
+  serialized state: the `Utf8JsonWriter` and pooled `RawJson` it is written through, and the array of its bytes the
+  request keeps. It measured 3008 B while the state was a `JsonDocument` from `DecisionContent.FromValue`, which
+  rewrote a converter's raw JSON. The text and `JsonElement` overloads do not serialize their state.
 
 The existing gates over the typed and built-set paths now include the `DecisionRequest`, the `DecisionResponse` and its
 `AnswerSlot[]`. A typed call measures 3424 B, against 2984 B before the pipeline, and a built-set call 3616 B, against
@@ -389,7 +391,7 @@ route, which ZeroAlloc.Rest 3.3.0 added in
 every call with a `StringBuilder` and a string, about 176 B, and every HTTP figure on this page from Phase 6.3
 includes it. [ZeroAlloc.Rest#425](https://github.com/ZeroAlloc-Net/ZeroAlloc.Rest/issues/425)
 removes it in release 3.3.1. A build with a constant route, which stands in for 3.3.1, measures 3072 B for the neutral
-call and the bare transport, 4440 B listening, 3528 B for the UTF-8 state and 2832 B for the typed state, and 3248 B
+call and the bare transport, 4440 B listening, 3248 B for the UTF-8 state and 2840 B for the typed state, and 3248 B
 for the typed call. On 3.3.0 the typed call's 3424 B is above its 3328 B budget, so `TypedEvaluateRoundTrip` and its
 two logger twins fail until Minos adopts 3.3.1. Every gate will be measured again then, and the new budgets set from
 those figures.

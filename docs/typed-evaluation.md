@@ -290,11 +290,15 @@ retries, and a hand-written fake in a test answers it by implementing that one c
 Inside a `DecisionClient`, the protocol writes the request from the definition into pooled buffers, and caches the
 questions JSON of each set after the first call.
 
-Two overloads pay for their state. `EvaluateUtf8Async<T>` parses it with `DecisionContent.FromUtf8Json`, and
-`EvaluateAsync<T, TState>` serializes it with `DecisionContent.FromValue`, into a `JsonDocument` on each call. Before
-the [pipeline](pipeline.md) they wrote the state straight into the request. Under Native AOT the document is 280 B per
-call for the smoke application's state, and [Performance](performance.md#phase-63--the-client-pipeline) has the
-figures. The text and `JsonElement` overloads pay no such cost.
+Each overload sends its state as it did before the [pipeline](pipeline.md). `EvaluateUtf8Async<T>` copies your bytes
+into the request as they are, with their whitespace and escapes, and parses nothing. The `JsonElement` overload writes
+your element without copying it first. Both read your state until the returned task completes, because a retry writes
+the request again, so don't change the bytes or dispose the document before then. `EvaluateAsync<T, TState>`
+serializes the state once per call, with the request's own writer settings, so the request carries the bytes your
+`JsonTypeInfo<TState>` writes, escaped as the request escapes them. That costs the serialized bytes and the writer,
+about 290 B for the smoke application's state under Native AOT, and
+[Performance](performance.md#phase-63--the-client-pipeline) has the figures. The other overloads add nothing for an
+object, an array or text.
 
 ## DecisionContent
 
