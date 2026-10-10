@@ -1,4 +1,7 @@
+using System.Text;
 using System.Text.Json;
+using ZeroAlloc.Results;
+using ZeroAlloc.TestHelpers;
 
 namespace Minos.Tests;
 
@@ -96,5 +99,34 @@ public sealed class DecisionClientExtensionsTests
         Assert.Same(fake, fake.GetService<IDecisionClient>());
         Assert.Null(fake.GetService<DecisionClientMetadata>());
         Assert.Null(fake.GetService<ClientTestKit.CapturingClient>(serviceKey: "key"));
+    }
+
+    // On main the JsonElement and UTF-8 overloads wrote the caller's state straight into the request. Over a client that
+    // answers with one completed response, each may cost no more than the text overload, which allocates nothing for its
+    // state: no detached copy of the element and no JsonDocument for the bytes.
+    [Fact]
+    public void Json_and_utf8_states_allocate_no_more_than_a_text_state()
+    {
+        var client = new FixedClient(ClientTestKit.CapturingClient.Canned(UrgencyCheck.Definition));
+        using var document = JsonDocument.Parse("""{"messages":[{"role":"user","content":"Help!"}]}""");
+        var element = document.RootElement;
+        ReadOnlyMemory<byte> utf8 = Encoding.UTF8.GetBytes(element.GetRawText());
+
+        AllocationGate.AssertNoMoreThanValueTask(
+            1000, () => client.EvaluateAsync<UrgencyCheck>("text"), () => client.EvaluateAsync<UrgencyCheck>(element), "JsonElementState");
+        AllocationGate.AssertNoMoreThanValueTask(
+            1000, () => client.EvaluateAsync<UrgencyCheck>("text"), () => client.EvaluateUtf8Async<UrgencyCheck>(utf8), "Utf8State");
+    }
+
+    private sealed class FixedClient(DecisionResponse response) : IDecisionClient
+    {
+        public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
+            => new(Result<DecisionResponse, DecisionError>.Success(response));
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
     }
 }

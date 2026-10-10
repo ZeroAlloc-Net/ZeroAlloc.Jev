@@ -101,6 +101,16 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
     }
 
     /// <summary>
+    /// Wraps a caller's JSON state without the detached copy <see cref="FromJson"/> makes, so a call does not pay for one.
+    /// The caller has already checked its kind with <see cref="TypedEvaluation.EnsureStateKind"/>. An object or array
+    /// stays in the caller's document, which must not be disposed until the call the content is sent with completes.
+    /// </summary>
+    /// <param name="json">A JSON string, object or array. A string becomes text, as with <see cref="FromJson"/>.</param>
+    /// <returns>The content.</returns>
+    internal static DecisionContent FromCheckedJsonState(JsonElement json)
+        => json.ValueKind == JsonValueKind.String ? new DecisionContent(json.GetString()!) : new DecisionContent(json);
+
+    /// <summary>
     /// Wraps a caller's UTF-8 JSON state without copying it, so the request writer sends its bytes unchanged. The
     /// caller has already checked it with <see cref="TypedEvaluation.EnsureStateJson"/>. The content reads the memory,
     /// so it must not change until the call the content is sent with completes.
