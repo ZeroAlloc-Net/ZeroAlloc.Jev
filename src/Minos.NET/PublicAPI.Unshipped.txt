@@ -148,3 +148,21 @@ Minos.DecisionClientBuilder.Use(System.Func<Minos.DecisionRequest!, Minos.IDecis
 Minos.DecisionClientBuilder.Build(System.IServiceProvider? services = null) -> Minos.IDecisionClient!
 Minos.DecisionClientBuilderExtensions
 static Minos.DecisionClientBuilderExtensions.AsBuilder(this Minos.IDecisionClient! innerClient) -> Minos.DecisionClientBuilder!
+Minos.DecisionRetryOptions
+Minos.DecisionRetryOptions.DecisionRetryOptions() -> void
+Minos.DecisionRetryOptions.InitialBackoff.get -> System.TimeSpan
+Minos.DecisionRetryOptions.InitialBackoff.set -> void
+Minos.DecisionRetryOptions.Jitter.get -> bool
+Minos.DecisionRetryOptions.Jitter.set -> void
+Minos.DecisionRetryOptions.MaxRetries.get -> int
+Minos.DecisionRetryOptions.MaxRetries.set -> void
+Minos.DecisionRetryOptions.MaxRetryDelay.get -> System.TimeSpan
+Minos.DecisionRetryOptions.MaxRetryDelay.set -> void
+Minos.DecisionRetryOptions.ShouldRetry.get -> System.Func<Minos.DecisionError!, bool>!
+Minos.DecisionRetryOptions.ShouldRetry.set -> void
+static Minos.DecisionRetryOptions.IsTransient(Minos.DecisionError! error) -> bool
+Minos.RetryingDecisionClient
+Minos.RetryingDecisionClient.RetryingDecisionClient(Minos.IDecisionClient! innerClient, Minos.DecisionRetryOptions? options = null, Microsoft.Extensions.Logging.ILogger? logger = null, System.TimeProvider? timeProvider = null) -> void
+override Minos.RetryingDecisionClient.EvaluateAsync(Minos.DecisionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.DecisionResponse!, Minos.DecisionError!>>
+Minos.RetryingDecisionClientBuilderExtensions
+static Minos.RetryingDecisionClientBuilderExtensions.UseRetries(this Minos.DecisionClientBuilder! builder, System.Action<Minos.DecisionRetryOptions!>? configure = null) -> Minos.DecisionClientBuilder!

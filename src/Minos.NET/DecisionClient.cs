@@ -40,6 +40,7 @@ public sealed class DecisionClient : IDecisionClient
     // Volatile: Dispose writes it before it disposes the owned HttpClient, and the error mapper and the disposal guard
     // read it on the threads that complete the calls in flight.
     private volatile bool _disposed;
+    private readonly DecisionRetryOptions _retryOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DecisionClient"/> class that creates and owns its
@@ -187,6 +188,13 @@ public sealed class DecisionClient : IDecisionClient
         }
 
         _provider = settings.Provider;
+        _retryOptions = new DecisionRetryOptions
+        {
+            MaxRetries = settings.MaxRetries,
+            InitialBackoff = settings.InitialBackoff,
+            MaxRetryDelay = settings.MaxRetryDelay,
+            Jitter = settings.Jitter,
+        };
         _providerName = DecisionTelemetry.ProviderOf(settings.Provider);
         _endpoint = httpClient.BaseAddress!;
         _model = settings.Model;
@@ -274,7 +282,7 @@ public sealed class DecisionClient : IDecisionClient
         => EvaluateAsync(request, cancellationToken);
 
     /// <inheritdoc />
-    /// <remarks>Returns this client for a type it is, then its <see cref="DecisionClientMetadata"/>; <see langword="null"/> for a non-null <paramref name="serviceKey"/>.</remarks>
+    /// <remarks>Returns this client for a type it is, a new <see cref="DecisionRetryOptions"/> from its retry settings, then its <see cref="DecisionClientMetadata"/>; <see langword="null"/> for a non-null <paramref name="serviceKey"/>.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="serviceType"/> is <see langword="null"/>.</exception>
     public object? GetService(Type serviceType, object? serviceKey = null)
     {
@@ -282,6 +290,11 @@ public sealed class DecisionClient : IDecisionClient
         if (serviceKey is not null)
         {
             return null;
+        }
+
+        if (serviceType == typeof(DecisionRetryOptions))
+        {
+            return _retryOptions.Clone();
         }
 
         return serviceType.IsInstanceOfType(this) ? this : _transport.GetService(serviceType);
