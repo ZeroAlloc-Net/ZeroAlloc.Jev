@@ -216,9 +216,9 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         ReadOnlyMemory<byte> state = Encoding.UTF8.GetBytes(SmokeAnswers.JsonState);
 
-        // Measured 3424 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, the same as TypedEvaluateRoundTrip: the
-        // request keeps the caller's array and the request writer copies its bytes into the body, so the state adds
-        // nothing. 176 B of it is 3.3.0's __EscapePath, fixed in 3.3.1; a constant-route build measures 3248 B/call. It
+        // Measured 3424 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, the same as TypedEvaluateRoundTrip,
+        // while the request kept the caller's array; it now keeps a copy, the state's length plus 24 B, so the caller may
+        // reuse its buffer. 176 B of it is 3.3.0's __EscapePath, fixed in 3.3.1; a constant-route build measures 3248 B/call. It
         // measured 3704 B/call when the overload parsed the state into a 280 B JsonDocument. Budget: set over that
         // measurement, with about 10% headroom rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(

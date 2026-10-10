@@ -34,7 +34,7 @@ internal static class TypedEvaluation
         }
 
         EnsureStateJson(buffer.Span, paramName);
-        return DecisionContent.FromCheckedUtf8State(buffer.Span.ToArray());
+        return DecisionContent.FromCheckedUtf8State(buffer.Span);
     }
 
     /// <summary>Checks that a state's JSON kind is one Jev accepts: a string, object or array.</summary>

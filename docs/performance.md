@@ -371,9 +371,10 @@ What each one allocates:
   `ValueTask` as it is, so `PassThroughStage` is budgeted at exactly 0 B.
 - **Listening** adds the `Activity`, its boxed start tags, the boxed tag and measurement values and each metric's
   `TagList`: 1368 B over the idle call. A typed call pays the same 1368 B, 4792 B against 3424 B.
-- **The UTF-8 state** costs nothing: the request keeps the caller's array and the request writer copies its bytes, so
-  the call measures `TypedEvaluateRoundTrip`'s 3424 B. Its 4096 B budget was set over the 3704 B it measured while it
-  parsed the state into a 280 B `JsonDocument`.
+- **The UTF-8 state** costs one copy of the caller's bytes, the state's length plus 24 B, which the request keeps so a
+  retry sends them again and the caller may reuse its buffer as soon as the call returns. The request writer copies
+  them into the body as they are. Its 4096 B budget was set over the 3704 B it measured while it parsed the state into a
+  280 B `JsonDocument`.
 - **The typed state** costs the transport's request and response, the `DecisionResponse`, the result record, and the
   serialized state: the `Utf8JsonWriter` and pooled `RawJson` it is written through, and the array of its bytes the
   request keeps. It measured 3008 B while the state was a `JsonDocument` from `DecisionContent.FromValue`, which

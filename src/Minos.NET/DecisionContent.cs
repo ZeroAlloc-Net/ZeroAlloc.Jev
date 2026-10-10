@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
@@ -14,9 +13,9 @@ namespace Minos;
 [JsonConverter(typeof(DecisionContentConverter))]
 public readonly struct DecisionContent : IEquatable<DecisionContent>
 {
-    // Text as a string, or a caller's UTF-8 JSON state held without a copy: a whole array as itself, any other memory
-    // in a Utf8Memory. Null for structured JSON, which is in _json, and for uninitialized content. Sharing one field
-    // keeps the struct, which every DecisionRequest carries, at its size.
+    // Text as a string, or a caller's UTF-8 JSON state as a byte[] copy the content owns. Null for structured JSON,
+    // which is in _json, and for uninitialized content. Sharing one field keeps the struct, which every
+    // DecisionRequest carries, at its size.
     private readonly object? _value;
     private readonly JsonElement _json;
 
@@ -101,34 +100,28 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
     }
 
     /// <summary>
-    /// Wraps a caller's UTF-8 JSON state without copying it, so the request writer sends its bytes unchanged. The
-    /// caller has already checked it with <see cref="TypedEvaluation.EnsureStateJson"/>. The content reads the memory,
-    /// so it must not change until the call the content is sent with completes.
+    /// Copies a caller's UTF-8 JSON state into an array the content owns, so the request writer sends its bytes
+    /// unchanged on every attempt and the caller may reuse its buffer as soon as the call returns. The caller has
+    /// already checked it with <see cref="TypedEvaluation.EnsureStateJson"/>.
     /// </summary>
     /// <param name="utf8Json">One JSON string, object or array.</param>
     /// <returns>The content.</returns>
-    internal static DecisionContent FromCheckedUtf8State(ReadOnlyMemory<byte> utf8Json)
-        => MemoryMarshal.TryGetArray(utf8Json, out var segment) && segment.Offset == 0 && segment.Count == segment.Array!.Length
-            ? new DecisionContent((object)segment.Array)
-            : new DecisionContent(new Utf8Memory(utf8Json));
+    internal static DecisionContent FromCheckedUtf8State(ReadOnlySpan<byte> utf8Json)
+        => new((object)utf8Json.ToArray());
 
-    /// <summary>Gets the caller's UTF-8 JSON, when this content is a state from <see cref="FromCheckedUtf8State"/>.</summary>
+    /// <summary>Gets the copied UTF-8 JSON, when this content is a state from <see cref="FromCheckedUtf8State"/>.</summary>
     /// <param name="utf8Json">The bytes as the caller wrote them, or empty.</param>
     /// <returns><see langword="true"/> when this content holds a caller's UTF-8 JSON.</returns>
     internal bool TryGetUtf8State(out ReadOnlySpan<byte> utf8Json)
     {
-        switch (_value)
+        if (_value is byte[] array)
         {
-            case byte[] array:
-                utf8Json = array;
-                return true;
-            case Utf8Memory memory:
-                utf8Json = memory.Memory.Span;
-                return true;
-            default:
-                utf8Json = default;
-                return false;
+            utf8Json = array;
+            return true;
         }
+
+        utf8Json = default;
+        return false;
     }
 
     /// <summary>Wraps an element that already owns its document, with no second copy.</summary>
@@ -282,12 +275,5 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
 
         var reader = new Utf8JsonReader(utf8);
         return FromDetached(JsonElement.ParseValue(ref reader), nameof(utf8));
-    }
-
-    /// <summary>A caller's UTF-8 state that is not a whole array, boxed so it fits the content's one reference field.</summary>
-    /// <param name="memory">The state.</param>
-    private sealed class Utf8Memory(ReadOnlyMemory<byte> memory)
-    {
-        public ReadOnlyMemory<byte> Memory { get; } = memory;
     }
 }

@@ -291,14 +291,14 @@ Inside a `DecisionClient`, the protocol writes the request from the definition i
 questions JSON of each set after the first call.
 
 Each overload sends the same request as before the [pipeline](pipeline.md). `EvaluateUtf8Async<T>` copies your bytes
-into the request as they are, with their whitespace and escapes, and parses nothing. It reads your memory until the
-returned task completes, because a retry writes the request again, so don't change the bytes before then. The
+into the request as they are, with their whitespace and escapes, and parses nothing. It copies them once when you
+call it, so you may reuse your buffer as soon as the call returns, and a retry sends the same bytes again. The
 `JsonElement` overload clones your element once per call, so you may dispose its document as soon as the call
 returns; the clone is 304 B for a one-message chat log. `EvaluateAsync<T, TState>` serializes the state once per call,
 with the request's own writer settings, so the request carries the bytes your `JsonTypeInfo<TState>` writes, escaped as
 the request escapes them. That costs the serialized bytes and the writer, about 290 B for the smoke application's state
 under Native AOT, and [Performance](performance.md#phase-63--the-client-pipeline) has the figures. The text overload
-adds nothing for its state, and neither does the UTF-8 overload when its memory is a whole array.
+adds nothing for its state, and the UTF-8 overload adds only that copy, the state's length plus 24 B.
 
 ## DecisionContent
 

@@ -290,7 +290,7 @@ public static void AddAuditedDecision(IServiceCollection services, IConfiguratio
 | A fake implements `EvaluateAsync(SystemOneRequest)` and `ListModelsAsync` | A fake implements `EvaluateAsync(DecisionRequest)`, `GetService` and `Dispose`, and returns a `DecisionResponse` built with its public constructor |
 | `AddDecisionClient` returns `IHttpClientBuilder` | It returns `DecisionClientServiceBuilder`, whose `HttpClient` property is the old builder |
 | `IDecisionClient` is not disposable | `IDecisionClient` derives from `IDisposable` |
-| `EvaluateUtf8Async<T>` reads the state only before it returns | It reads the bytes until the returned task completes, because a retry writes the request again, so keep them unchanged until then |
+| `EvaluateUtf8Async<T>` writes the state into the request before it returns | It copies the bytes once when you call it, the state's length plus 24 B, and a retry sends that copy, so you may still reuse the buffer as soon as the call returns |
 
 A fake is now three members. This one answers a set of one Noul question:
 

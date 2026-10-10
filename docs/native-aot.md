@@ -190,7 +190,7 @@ regression cannot reach a release unnoticed.
 | `NeutralEvaluateRoundTrip` | A neutral `EvaluateAsync(DecisionRequest)` call on the standard pipeline. | 3584 |
 | `BareTransportRoundTrip` | A neutral call with `UseStandardPipeline` off, the transport alone. | 3584 |
 | `PassThroughStage` | A `DelegatingDecisionClient` that overrides nothing, over an inner call that completes synchronously. | 0 |
-| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call, which sends the caller's bytes without a copy of its own. | 4096 |
+| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call, which copies the caller's bytes once and sends them as written. | 4096 |
 | `TypedStateEvaluateRoundTrip` | A typed `EvaluateAsync<T, TState>` call, which serializes its state once into an array. | 3328 |
 | `EvaluateBuiltSetRoundTrip` | An `EvaluateAsync` call over a built set. | 3648 |
 | `BuildQuestionSet` | Building a question set. | 7296 |

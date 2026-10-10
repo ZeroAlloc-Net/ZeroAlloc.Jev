@@ -66,6 +66,9 @@ public sealed class DecisionClientTypedTests : IDisposable
 {
     private const string TicketJson = """{"messages":[{"role":"user","content":"Help!"}]}""";
 
+    // Main's message for a typed state that is not a JSON string, object or array.
+    private const string InvalidStateMessage = "The state must be a JSON string, object or array. (Parameter 'state')";
+
     private static readonly TicketContext Ticket = new("Payouts failing", "Help! My payouts have been failing for 3 days.");
 
     private readonly List<HttpClient> _httpClients = [];
@@ -156,6 +159,48 @@ public sealed class DecisionClientTypedTests : IDisposable
         var document = JsonDocument.Parse(TicketJson);
         var call = client.EvaluateAsync<UrgencyCheck>(document.RootElement);
         document.Dispose();
+        Assert.False(call.IsCompleted);
+        firstAttemptMayAnswer.SetResult();
+        var result = await call;
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, sent => Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, TicketJson), sent.Body));
+    }
+
+    // On main the UTF-8 overload wrote the body before the call returned, so a caller could reuse its buffer at once. The
+    // overload copies the bytes, so a retry that writes the request again, after the caller overwrote them, still sends
+    // the original state.
+    [Fact]
+    public async Task Utf8_BufferOverwrittenRightAfterTheCall_IsStillSentUnchangedOnARetry()
+    {
+        const string Overwrite = """{"messages":[{"role":"user","content":"Bye!!"}]}""";
+        Assert.Equal(TicketJson.Length, Overwrite.Length);
+        var firstAttemptMayAnswer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+        var handler = new StubHandler(async (_, _) =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+            {
+                await firstAttemptMayAnswer.Task;
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(Fixture.Text("response-noul.json"), Encoding.UTF8, "application/json"),
+            };
+        });
+        using var client = ClientTestKit.Client(_httpClients, handler, configure: o =>
+        {
+            o.MaxRetries = 1;
+            o.InitialBackoff = TimeSpan.FromMilliseconds(1);
+            o.Jitter = false;
+        });
+
+        var buffer = Encoding.UTF8.GetBytes(TicketJson);
+        var call = client.EvaluateUtf8Async<UrgencyCheck>(buffer);
+        Encoding.UTF8.GetBytes(Overwrite, buffer);
         Assert.False(call.IsCompleted);
         firstAttemptMayAnswer.SetResult();
         var result = await call;
@@ -297,6 +342,7 @@ public sealed class DecisionClientTypedTests : IDisposable
             () => client.EvaluateAsync<PaddedUrgency, PaddedState>(new PaddedState(" \n 42"), PaddedStateJsonContext.Default.PaddedState).AsTask());
 
         Assert.Equal("state", exception.ParamName);
+        Assert.Equal(InvalidStateMessage, exception.Message);
         Assert.Empty(handler.Requests);
         Assert.Equal(0, pool.Outstanding);
     }
@@ -523,10 +569,10 @@ public sealed class DecisionClientTypedTests : IDisposable
         ThrowsSynchronously<ArgumentNullException>(
             () => client.EvaluateAsync<TicketUrgency, TicketContext>(null!, TicketContextJsonContext.Default.TicketContext).AsTask());
         ThrowsSynchronously<ArgumentNullException>(() => client.EvaluateAsync<TicketUrgency, TicketContext>(Ticket, null!).AsTask());
-        Assert.Equal(
-            "state",
-            ThrowsSynchronously<ArgumentException>(
-                () => client.EvaluateAsync<NumericUrgency, NumericState>(new NumericState(42), NumericStateJsonContext.Default.NumericState).AsTask()).ParamName);
+        var numeric = ThrowsSynchronously<ArgumentException>(
+            () => client.EvaluateAsync<NumericUrgency, NumericState>(new NumericState(42), NumericStateJsonContext.Default.NumericState).AsTask());
+        Assert.Equal("state", numeric.ParamName);
+        Assert.Equal(InvalidStateMessage, numeric.Message);
 
         Assert.Empty(handler.Requests);
         Assert.Equal(0, pool.Outstanding);
@@ -537,8 +583,10 @@ public sealed class DecisionClientTypedTests : IDisposable
     {
         IDecisionClient fake = new CapturingClient();
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
             async () => await fake.EvaluateAsync<NumericUrgency, NumericState>(new NumericState(42), NumericStateJsonContext.Default.NumericState));
+
+        Assert.Equal(InvalidStateMessage, exception.Message);
     }
 
     private async Task AssertSendsTheDefaultRequest<T>(

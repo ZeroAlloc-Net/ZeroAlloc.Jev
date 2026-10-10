@@ -265,8 +265,8 @@ public sealed class DecisionContentTests
     public void EnsureSingleJsonValue_AcceptsOneValue(string json)
         => DecisionContent.EnsureSingleJsonValue(Encoding.UTF8.GetBytes(json), "arg");
 
-    // EvaluateUtf8Async keeps the caller's bytes so they are sent unchanged; every public member still behaves as it does
-    // for the content FromUtf8Json makes of the same bytes.
+    // EvaluateUtf8Async keeps a copy of the caller's bytes so they are sent unchanged; every public member still behaves
+    // as it does for the content FromUtf8Json makes of the same bytes.
     public static TheoryData<string> Utf8States => [" { \"a\" : [1, \"é\"] } ", "[1,2]", "  \"plain \\u00e9 text\"  ", "{}"];
 
     [Theory]
@@ -278,8 +278,11 @@ public sealed class DecisionContentTests
         var padded = new byte[bytes.Length + 4];
         bytes.CopyTo(padded, 2);
 
-        // A whole array is held as itself; a slice of a larger one in a box.
-        foreach (var state in new[] { DecisionContent.FromCheckedUtf8State(bytes), DecisionContent.FromCheckedUtf8State(padded.AsMemory(2, bytes.Length)) })
+        // A whole array and a slice of a larger one are both copied, and only the state's bytes are kept.
+        var states = new[] { DecisionContent.FromCheckedUtf8State(bytes), DecisionContent.FromCheckedUtf8State(padded.AsSpan(2, bytes.Length)) };
+        Array.Clear(bytes);
+        Array.Clear(padded);
+        foreach (var state in states)
         {
             Assert.True(state.TryGetUtf8State(out var utf8));
             Assert.Equal(json, Encoding.UTF8.GetString(utf8));
