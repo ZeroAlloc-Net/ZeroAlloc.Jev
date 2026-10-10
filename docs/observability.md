@@ -400,8 +400,8 @@ calls' instrumentation hand back each call's own task, so the numbers are these:
   typed or built-set call that completed asynchronously paid one extra state machine of 211 B, measured under the JIT;
   the telemetry stage no longer needs it.
 - **While listening,** a call pays for the span, its attributes and the measurements. Under Native AOT,
-  a typed call pays 1368 B, which is 4792 B listening against 3424 B with nothing listening, and a
-  `DecisionRequest` call pays the same 1368 B, 4616 B against 3248 B. Both pairs were measured on ZeroAlloc.Rest 3.3.0.
+  a typed call pays 1368 B, which is 4616 B listening against 3248 B with nothing listening, and a
+  `DecisionRequest` call pays the same 1368 B, 4440 B against 3072 B.
   [Phase 6.3](performance.md#phase-63--the-client-pipeline) in the performance page has the details.
 
 [Phase 3.2](performance.md#phase-32--telemetry) in the performance page has the benchmarks from before the pipeline,

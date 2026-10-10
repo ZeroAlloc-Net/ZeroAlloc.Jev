@@ -119,12 +119,10 @@ internal static class AllocationChecks
         };
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
 
-        // Measured 3424 B/call on published win-x64 AOT through the standard pipeline: the request's Utf8JsonWriter and
+        // Measured 3248 B/call on published win-x64 AOT through the standard pipeline: the request's Utf8JsonWriter and
         // RawJson, ZeroAlloc.Rest's own per-attempt allocations (HttpRequestMessage, headers, the MemoryStream the body is
         // copied into, and StreamContent), the response's HttpResponseMessage and body buffering, the DecisionRequest, the
-        // DecisionResponse with its AnswerSlot[] and probabilities, and the SmokeTriage. About 176 B of it is ZeroAlloc.Rest
-        // 3.3.0's __EscapePath, a StringBuilder and a string for the {**path} route on every call, fixed by
-        // ZeroAlloc.Rest#425 in 3.3.1; without it the call measures about 3248 B. It measured 2984 B/call before the
+        // DecisionResponse with its AnswerSlot[] and probabilities, and the SmokeTriage. It measured 2984 B/call before the
         // pipeline, 3368 B/call before ZeroAlloc.Rest 3.2.1 and 3784 B/call when first budgeted in Phase 1.8. Budget: about
         // 10% headroom over the 2984 B measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
@@ -141,15 +139,14 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
 
-        // Measured 3248 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0: the request's Utf8JsonWriter and
+        // Measured 3072 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1: the request's Utf8JsonWriter and
         // RawJson, ZeroAlloc.Rest's per-attempt HttpRequestMessage, headers, MemoryStream and StreamContent, the
         // response's HttpResponseMessage and body buffering, and the DecisionResponse with its AnswerSlot[] and
         // probabilities. The standard stages add nothing on a call that completes synchronously with nothing listening,
-        // so it measures the same as BareTransportRoundTrip. 176 B of it is 3.3.0's __EscapePath for the {**path}
-        // route, fixed by ZeroAlloc.Rest#425 in 3.3.1; a constant-route build measures 3072 B/call. Budget: about 10%
-        // headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        // so it measures the same as BareTransportRoundTrip, and the {**path} route's endpoint path costs nothing.
+        // Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
-            budgetBytes: 3584,
+            budgetBytes: 3392,
             action: () => client.EvaluateAsync(request),
             label: "NeutralEvaluateRoundTrip",
             passDescription: "EvaluateAsync of a DecisionRequest stays within its allocation budget");
@@ -163,12 +160,11 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
 
-        // Measured 4616 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0: NeutralEvaluateRoundTrip's bytes plus
-        // the Activity, its boxed start tags, the boxed tag and measurement values and each metric's TagList. 176 B of
-        // it is 3.3.0's __EscapePath, fixed in 3.3.1; a constant-route build measures 4440 B/call. Budget: about 10%
-        // headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        // Measured 4440 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1: NeutralEvaluateRoundTrip's 3072 B plus
+        // the Activity, its boxed start tags, the boxed tag and measurement values and each metric's TagList, 1368 B.
+        // Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
-            budgetBytes: 5120,
+            budgetBytes: 4928,
             action: () => client.EvaluateAsync(request),
             label: "NeutralEvaluateRoundTripWhileListening",
             passDescription: "EvaluateAsync of a DecisionRequest while listening stays within its allocation budget");
@@ -183,12 +179,11 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key", UseStandardPipeline = false });
         var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
 
-        // Measured 3248 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, the same as NeutralEvaluateRoundTrip:
-        // the transport's request and response, body buffering and the DecisionResponse, with no stage around it. 176 B
-        // of it is 3.3.0's __EscapePath, fixed in 3.3.1; a constant-route build measures 3072 B/call. Budget: about 10%
-        // headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        // Measured 3072 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1, the same as NeutralEvaluateRoundTrip:
+        // the transport's request and response, body buffering and the DecisionResponse, with no stage around it.
+        // Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
-            budgetBytes: 3584,
+            budgetBytes: 3392,
             action: () => client.EvaluateAsync(request),
             label: "BareTransportRoundTrip",
             passDescription: "EvaluateAsync of a DecisionRequest on the bare transport stays within its allocation budget");
@@ -216,13 +211,14 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         ReadOnlyMemory<byte> state = Encoding.UTF8.GetBytes(SmokeAnswers.JsonState);
 
-        // Measured 3424 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, the same as TypedEvaluateRoundTrip,
-        // while the request kept the caller's array; it now keeps a copy, the state's length plus 24 B, so the caller may
-        // reuse its buffer. 176 B of it is 3.3.0's __EscapePath, fixed in 3.3.1; a constant-route build measures 3248 B/call. It
-        // measured 3704 B/call when the overload parsed the state into a 280 B JsonDocument. Budget: set over that
-        // measurement, with about 10% headroom rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        // Measured 3360 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1: TypedEvaluateRoundTrip's request,
+        // transport, DecisionResponse and SmokeTriage, plus the one copy of the caller's bytes the request keeps, 112 B for
+        // this 85 B state, so the caller may reuse its buffer as soon as the call returns. The request writer
+        // copies those bytes into the body as they are and parses nothing. It measured 3704 B/call when the overload
+        // parsed the state into a 280 B JsonDocument. Budget: about 10% headroom over the measurement, rounded up to the
+        // next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
-            budgetBytes: 4096,
+            budgetBytes: 3712,
             action: () => client.EvaluateUtf8Async<SmokeTriage>(state),
             label: "Utf8StateEvaluateRoundTrip",
             passDescription: "EvaluateUtf8Async<T> stays within its allocation budget");
@@ -235,15 +231,14 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var state = new SmokeState("Payouts failing", SmokeAnswers.State);
 
-        // Measured 3016 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, over a one-question response: the
+        // Measured 2840 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1, over a one-question response: the
         // transport's request and response, the DecisionResponse, the SmokeStateTriage, and the serialized state, which
         // the string and JsonElement overloads do not pay: the Utf8JsonWriter and pooled RawJson it is written through,
-        // and the array of its bytes the request keeps. 176 B of it is 3.3.0's __EscapePath, fixed in 3.3.1; a
-        // constant-route build measures 2840 B/call. It measured 3008 B/call when the state was a JsonDocument from
-        // DecisionContent.FromValue, which re-wrote a converter's raw JSON. Budget: about 10% headroom over that
+        // and the array of its bytes the request keeps. It measured 3008 B/call when the state was a JsonDocument from
+        // DecisionContent.FromValue, which re-wrote a converter's raw JSON. Budget: about 10% headroom over the
         // measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
-            budgetBytes: 3328,
+            budgetBytes: 3136,
             action: () => client.EvaluateAsync<SmokeStateTriage, SmokeState>(state, SmokeStateJsonContext.Default.SmokeState),
             label: "TypedStateEvaluateRoundTrip",
             passDescription: "EvaluateAsync<T, TState> stays within its allocation budget");
@@ -308,7 +303,7 @@ internal static class AllocationChecks
     {
         var callsBefore = DiscardingLoggerFactory.Calls;
 
-        // Measured 3424 B/call on published win-x64 AOT, the same as TypedEvaluateRoundTrip's current measurement and its unlogged twin in this run,
+        // Measured 3248 B/call on published win-x64 AOT, the same as TypedEvaluateRoundTrip's current measurement and its unlogged twin in this run,
         // so the enabled logger adds nothing on the synchronous path the canned handler takes: each event's state is a
         // struct handed to a logger that discards it, the timing is two Stopwatch timestamps, and no state machine is
         // boxed while a call completes synchronously. A call that completes asynchronously also allocates the
@@ -501,10 +496,10 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var set = SmokeBuiltSet.Full(out _, out _, out _, out _);
 
-        // Measured 3616 B/call on published win-x64 AOT through the standard pipeline: the QuestionSet's pre-built request
+        // Measured 3440 B/call on published win-x64 AOT through the standard pipeline: the QuestionSet's pre-built request
         // body copied into a pooled buffer, HttpClient's request and response objects and body buffering, the
-        // DecisionRequest, the DecisionResponse with its AnswerSlot[], the Answers result, and about 176 B of ZeroAlloc.Rest
-        // 3.3.0's __EscapePath, fixed in 3.3.1. It measured 3272 B/call before the pipeline, 3656 B/call before ZeroAlloc.Rest 3.2.1 and
+        // DecisionRequest, the DecisionResponse with its AnswerSlot[] and the Answers result. It measured 3272 B/call
+        // before the pipeline, 3656 B/call before ZeroAlloc.Rest 3.2.1 and
         // 4288 B/call when first budgeted in Phase 2.4. Budget: about 10% headroom over the measurement, rounded up to
         // the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
@@ -719,7 +714,7 @@ internal static class AllocationChecks
         using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, TriageResponseJson)) { BaseAddress = new Uri("https://example.test/api/") };
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
 
-        // Measured 4792 B/call on published win-x64 AOT, 4544 B/call before the pipeline. The call pays
+        // Measured 4616 B/call on published win-x64 AOT, 4544 B/call before the pipeline. The call pays
         // TypedEvaluateRoundTrip's bytes plus the span, tags and measurements. Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the
         // Phase 1.8 rule.
         GateValueTask(
@@ -739,7 +734,7 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var set = SmokeBuiltSet.Full(out _, out _, out _, out _);
 
-        // Measured 4984 B/call on published win-x64 AOT, 4832 B/call before the pipeline. The call pays
+        // Measured 4808 B/call on published win-x64 AOT, 4832 B/call before the pipeline. The call pays
         // EvaluateBuiltSetRoundTrip's bytes plus the span,
         // tags and measurements. Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B,
         // per the Phase 1.8 rule.
@@ -762,10 +757,10 @@ internal static class AllocationChecks
         var median = await MedianYieldingAsync(TriageResponseJson, null, static client => client.EvaluateAsync<SmokeTriage>("Help!")).ConfigureAwait(false);
         Console.WriteLine($"     yielding EvaluateAsync<T> B/call with telemetry off: {median}");
 
-        // Measured 4565 B/call, the median of five runs, on published win-x64 AOT, 4184 B/call before the pipeline. This is
+        // Measured 4389 B/call, the median of five runs, on published win-x64 AOT, 4184 B/call before the pipeline. This is
         // the whole asynchronously completing call: the transport's request and response, body buffering, parsing, the
-        // DecisionRequest and DecisionResponse, ZeroAlloc.Rest 3.3.0's __EscapePath (about 176 B) and every boxed async state
-        // machine, among them the retry stage's and the typed extension's. Budget: about 10% headroom over the measurement, rounded up
+        // DecisionRequest and DecisionResponse, and every boxed async state machine, among them the retry stage's and the
+        // typed extension's. Budget: about 10% headroom over the measurement, rounded up
         // to the next multiple of 64 B, per the Phase 1.8 rule.
         const long BudgetBytes = 4608;
         Program.Check(

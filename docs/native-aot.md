@@ -157,9 +157,8 @@ object.
   time](question-sets-at-run-time.md).
 - **Parsing a typed answer set allocates the result.** That is the result record, plus the shared buffer that holds the
   probabilities of its answers, and nothing else.
-- **A whole call allocates a few kilobytes.** Over the canned handler, a typed call measures 3424 B under Native AOT,
-  measured on ZeroAlloc.Rest 3.3.0. [Performance](performance.md#phase-63--the-client-pipeline) has the measurements
-  for the other paths.
+- **A whole call allocates a few kilobytes.** Over the canned handler, a typed call measures 3248 B under Native AOT.
+  [Performance](performance.md#phase-63--the-client-pipeline) has the measurements for the other paths.
 - **Building a question set allocates the set.** It measures 2648 B, so build it once and share it, as the
   [run-time page](question-sets-at-run-time.md) advises.
 - **Logging and telemetry add nothing until something listens.** With no logger, or every level off, a call
@@ -187,11 +186,11 @@ regression cannot reach a release unnoticed.
 | `GeneratedCreate` | The generated `Create` of a typed set building its result from the answer slots, which replaces the old `GeneratedParse` gate of 192. The protocol's probability buffer is counted by the typed round trips and by a test in the unit suite, which holds the whole read to 192. | 128 |
 | `EvaluateRoundTrip` | A raw `EvaluateAsync` call. | 4352 |
 | `TypedEvaluateRoundTrip` | A typed `EvaluateAsync<T>` call. | 3328 |
-| `NeutralEvaluateRoundTrip` | A neutral `EvaluateAsync(DecisionRequest)` call on the standard pipeline. | 3584 |
-| `BareTransportRoundTrip` | A neutral call with `UseStandardPipeline` off, the transport alone. | 3584 |
+| `NeutralEvaluateRoundTrip` | A neutral `EvaluateAsync(DecisionRequest)` call on the standard pipeline. | 3392 |
+| `BareTransportRoundTrip` | A neutral call with `UseStandardPipeline` off, the transport alone. | 3392 |
 | `PassThroughStage` | A `DelegatingDecisionClient` that overrides nothing, over an inner call that completes synchronously. | 0 |
-| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call, which copies the caller's bytes once and sends them as written. | 4096 |
-| `TypedStateEvaluateRoundTrip` | A typed `EvaluateAsync<T, TState>` call, which serializes its state once into an array. | 3328 |
+| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call, which copies the caller's bytes once and sends them as written. | 3712 |
+| `TypedStateEvaluateRoundTrip` | A typed `EvaluateAsync<T, TState>` call, which serializes its state once into an array. | 3136 |
 | `EvaluateBuiltSetRoundTrip` | An `EvaluateAsync` call over a built set. | 3648 |
 | `BuildQuestionSet` | Building a question set. | 7296 |
 | `ContentFromValue` | `DecisionContent.FromValue`. | 320 |
@@ -203,7 +202,7 @@ regression cannot reach a release unnoticed.
 | `EvaluateRoundTripThroughDependencyInjection` | A raw call through a client resolved from the container, and no more than a hand-built client's own measurement. | 4416 |
 | `EvaluateRoundTripWhileListening` | A raw call with a span and metric listener attached. | 5888 |
 | `TypedEvaluateRoundTripWhileListening` | A typed call with the listeners attached. | 5056 |
-| `NeutralEvaluateRoundTripWhileListening` | A neutral call with the listeners attached. | 5120 |
+| `NeutralEvaluateRoundTripWhileListening` | A neutral call with the listeners attached. | 4928 |
 | `EvaluateBuiltSetRoundTripWhileListening` | A built-set call with the listeners attached. | 5376 |
 | `EvaluateRoundTripThroughBoundConfiguration` | A raw call through a client bound from configuration, equal to a hand-built client's own measurement. | same as the hand-built client |
 | `DisabledLoggerAddsNothingWhereAnEnabledOneDoes` | Asynchronous calls with no factory, a null factory and an enabled logger. Checks the disabled ones add no more than 16 B per call, a tolerance for the noise of a process-wide counter ([#104](https://github.com/MarcelRoozekrans/Minos.NET/issues/104)). | no byte budget |
