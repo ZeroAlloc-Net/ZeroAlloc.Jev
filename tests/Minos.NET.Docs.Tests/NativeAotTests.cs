@@ -142,7 +142,7 @@ public sealed partial class NativeAotTests
     public void TheProseFigures_AreOnTheQuotingPagesToo()
     {
         var aot = Source("docs", "native-aot.md");
-        Assert.Contains("2984 B under Native AOT", aot, StringComparison.Ordinal);
+        Assert.Contains("3424 B under Native AOT", aot, StringComparison.Ordinal);
         Assert.Contains("It measures 2648 B", aot, StringComparison.Ordinal);
         Assert.Contains("211 B, measured under the JIT", aot, StringComparison.Ordinal);
 

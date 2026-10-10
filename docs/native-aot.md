@@ -157,8 +157,9 @@ object.
   time](question-sets-at-run-time.md).
 - **Parsing a typed answer set allocates the result.** That is the result record, plus the shared buffer that holds the
   probabilities of its answers, and nothing else.
-- **A whole call allocates a few kilobytes.** Over the canned handler, a typed call measures 2984 B under Native AOT,
-  and [Performance](performance.md) has the measurements for the other paths.
+- **A whole call allocates a few kilobytes.** Over the canned handler, a typed call measures 3424 B under Native AOT,
+  measured on ZeroAlloc.Rest 3.3.0. [Performance](performance.md#phase-63--the-client-pipeline) has the measurements
+  for the other paths.
 - **Building a question set allocates the set.** It measures 2648 B, so build it once and share it, as the
   [run-time page](question-sets-at-run-time.md) advises.
 - **Logging and telemetry add nothing until something listens.** With no logger, or every level off, a call

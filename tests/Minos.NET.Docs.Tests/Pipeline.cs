@@ -33,7 +33,6 @@ public static class DefaultPipeline
 }
 #endregion
 
-
 public static class CustomPipeline
 {
     #region Pipeline_Custom

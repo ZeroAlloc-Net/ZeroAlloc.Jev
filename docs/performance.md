@@ -385,8 +385,9 @@ among them the retry stage's and the typed extension's. No budget was raised.
 
 **ZeroAlloc.Rest 3.3.0's path escaping.** The transport posts to the protocol's endpoint path through a `{**path}`
 route, which ZeroAlloc.Rest 3.3.0 added in
-[ZeroAlloc.Rest#422](https://github.com/ZeroAlloc-Net/ZeroAlloc.Rest/issues/422). Release 3.3.0 escapes that path on every call with a `StringBuilder` and a string, about 176 B, and every HTTP figure on
-this page from Phase 6.3 includes it. [ZeroAlloc.Rest#425](https://github.com/ZeroAlloc-Net/ZeroAlloc.Rest/issues/425)
+[ZeroAlloc.Rest#422](https://github.com/ZeroAlloc-Net/ZeroAlloc.Rest/issues/422). Release 3.3.0 escapes that path on
+every call with a `StringBuilder` and a string, about 176 B, and every HTTP figure on this page from Phase 6.3
+includes it. [ZeroAlloc.Rest#425](https://github.com/ZeroAlloc-Net/ZeroAlloc.Rest/issues/425)
 removes it in release 3.3.1. A build with a constant route, which stands in for 3.3.1, measures 3072 B for the neutral
 call and the bare transport, 4440 B listening, 3528 B for the UTF-8 state and 2832 B for the typed state, and 3248 B
 for the typed call. On 3.3.0 the typed call's 3424 B is above its 3328 B budget, so `TypedEvaluateRoundTrip` and its

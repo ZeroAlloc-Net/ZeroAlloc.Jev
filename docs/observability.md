@@ -20,8 +20,8 @@ Each signal comes from a stage of the [client pipeline](pipeline.md), which ever
 
 All three describe the call and never its content. Your state, your questions, the answers, your API key and the
 server's error text stay out of every one of them, and the sections below say exactly where the line is drawn. All
-three are also cheap: with nothing listening they add nothing to calls that complete synchronously, and a small fixed
-cost to asynchronous ones. [The cost of listening](#the-cost-of-listening) and
+three are also cheap: with nothing listening they add nothing, and only an enabled logger adds a state machine to a
+call that completes asynchronously. [The cost of listening](#the-cost-of-listening) and
 [the cost of logging](#the-cost-of-logging) give the figures.
 
 ## Which stage emits what
