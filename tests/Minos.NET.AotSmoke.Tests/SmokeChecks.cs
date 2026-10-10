@@ -21,12 +21,12 @@ internal sealed record SmokeCheck(IMethodSymbol Method, List<string> Declared, H
 /// smoke app's own methods, constructors, accessors and lambdas it reaches call in turn, generated code included. A
 /// constructor of a smoke type also calls its base constructor, and reaches the type's protected overrides of members
 /// declared outside the smoke app, since only the code that declares them can call them, as a
-/// <c>DelegatingDecisionClient</c>'s <c>Dispose()</c> calls a stage's <c>Dispose(bool)</c>. A call is matched by the signature of the member it
-/// binds to, so a call on a <c>DecisionClient</c> covers <c>DecisionClient</c>'s member, and a call through an
-/// <c>IDecisionClient</c> covers the interface's. A default interface method counts only when its own body runs: the
-/// receiver's static type, or the type its local was created as, must not override it, so a default called on a
-/// <c>DecisionClient</c> or on a client resolved from a container does not count, nor does one on a local that is assigned
-/// again after its declaration. A call inside <c>nameof</c> runs nothing and does not count.
+/// <c>DelegatingDecisionClient</c>'s <c>Dispose()</c> calls a stage's <c>Dispose(bool)</c>. A call is matched by the
+/// signature of the member it binds to, so a call on a <c>DecisionClient</c> covers <c>DecisionClient</c>'s member, and
+/// a call through an <c>IDecisionClient</c> covers the interface's. A default interface method counts only when its own
+/// body runs: the receiver's static type, or the type its local was created as, must not override it, so a default
+/// called on a <c>DecisionClient</c> or on a client resolved from a container does not count, nor does one on a local
+/// that is assigned again after its declaration. A call inside <c>nameof</c> runs nothing and does not count.
 /// </remarks>
 internal static class SmokeChecks
 {
