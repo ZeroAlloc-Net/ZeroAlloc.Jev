@@ -12,7 +12,8 @@ namespace Minos.Transport;
 /// Every pooled buffer is returned before the call completes. An attempt that would start after the owning client was
 /// disposed returns <see cref="DecisionErrorKind.Disposed"/> without being sent. An attempt torn down by disposing an
 /// owned <see cref="HttpClient"/> is mapped to <see cref="DecisionErrorKind.Disposed"/> by <paramref name="api"/>'s
-/// <see cref="DecisionErrorMapper"/>.
+/// <see cref="DecisionErrorMapper"/>, and one whose send throws <see cref="ObjectDisposedException"/> once the client is
+/// disposed is reported as <see cref="DecisionErrorKind.Disposed"/> here.
 /// </remarks>
 /// <param name="api">The REST client that sends the attempt.</param>
 /// <param name="protocol">Writes the request, names the endpoint and reads the response.</param>
@@ -55,7 +56,18 @@ internal sealed class DecisionTransport(
         try
         {
             var retryCount = request.RetryAttempt == 0 ? default(int?) : request.RetryAttempt;
-            var sent = await api.SendAsync(body, protocol.EndpointPath, authorization, retryCount, ct).ConfigureAwait(false);
+            Result<RawJson, DecisionError> sent;
+            try
+            {
+                sent = await api.SendAsync(body, protocol.EndpointPath, authorization, retryCount, ct).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException exception) when (disposed())
+            {
+                // Dispose landed after the check above but before the send checked it: the HttpClient threw rather than
+                // answer, and ZeroAlloc.Rest rethrows that unmapped.
+                return Result<DecisionResponse, DecisionError>.Failure(DecisionErrorMapper.Disposed(exception));
+            }
+
             if (sent.IsFailure)
             {
                 return Result<DecisionResponse, DecisionError>.Failure(sent.Error);

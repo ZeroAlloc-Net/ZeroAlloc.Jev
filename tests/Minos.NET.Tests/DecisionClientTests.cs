@@ -341,7 +341,7 @@ public sealed class DecisionClientTests : IDisposable
 
     [Theory]
     [InlineData(typeof(IDecisionClient), 1)]
-    [InlineData(typeof(DecisionClient), 8)]
+    [InlineData(typeof(DecisionClient), 3)]
     [InlineData(typeof(DecisionClientExtensions), 5)]
     public void EveryCancellationTokenParameter_IsNamedCancellationToken(Type type, int count)
     {

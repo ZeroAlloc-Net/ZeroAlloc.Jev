@@ -100,12 +100,12 @@ public class ClientBenchmarks
     [Benchmark]
     public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync() => _listModelsClient.ListModelsAsync();
 
-    /// <summary><see cref="DecisionClient.EvaluateAsync{T}(string)"/> over a fixed triage (three-answer) response,
+    /// <summary><see cref="DecisionClientExtensions.EvaluateAsync{T}(IDecisionClient, string)"/> over a fixed triage (three-answer) response,
     /// through the raw, pooled-buffer path.</summary>
     [Benchmark]
     public ValueTask<Result<BenchTriage, DecisionError>> TypedEvaluateAsync() => _typedEvaluateClient.EvaluateAsync<BenchTriage>(_typedState);
 
-    /// <summary><see cref="DecisionClient.EvaluateAsync{T}(string)"/> over the same fixed Noul (one-answer) response as
+    /// <summary><see cref="DecisionClientExtensions.EvaluateAsync{T}(IDecisionClient, string)"/> over the same fixed Noul (one-answer) response as
     /// <see cref="EvaluateAsync"/>, through the raw, pooled-buffer path, so the typed and untyped calls compare
     /// like for like.</summary>
     [Benchmark]

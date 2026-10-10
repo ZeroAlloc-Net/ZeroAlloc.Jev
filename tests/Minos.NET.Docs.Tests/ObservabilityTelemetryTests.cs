@@ -110,7 +110,7 @@ public sealed class ObservabilityTelemetryTests
         Assert.Equal(Model, span.GetTagItem("gen_ai.request.model"));
         Assert.Equal("docs.example", span.GetTagItem("server.address"));
         Assert.Equal(443, span.GetTagItem("server.port"));
-        Assert.Equal("evaluate-typed", span.GetTagItem("minos.operation"));
+        Assert.Equal("evaluate-set", span.GetTagItem("minos.operation"));
         Assert.Equal(3, span.GetTagItem("minos.request.question_count"));
         Assert.Equal("jev-1.13.0", span.GetTagItem("gen_ai.response.model"));
         Assert.Equal(150, span.GetTagItem("gen_ai.usage.input_tokens"));
@@ -255,7 +255,7 @@ public sealed class ObservabilityTelemetryTests
         Assert.Equal(onSpans, all);
         Assert.Equal(atStart, start);
         Assert.Equal(
-            ["evaluate", "evaluate-typed", "list-models"],
+            ["evaluate", "evaluate-set", "list-models"],
             listener.Spans.Select(span => (string)span.GetTagItem("minos.operation")!).Distinct().Order(StringComparer.Ordinal));
         Assert.Equal("gen-1727400000-abc123", listener.Spans[1].GetTagItem("gen_ai.response.id"));
         Assert.Equal(0.000296, listener.Spans[1].GetTagItem("minos.usage.cost"));

@@ -16,7 +16,7 @@
     <!--
       ZeroAlloc.Validation's generator emits every {Model}Validator internal: they check this library's internal
       question specs and are no part of its API. Every ZeroAlloc generator reads this one property; the
-      ZeroAlloc.Rest and ZeroAlloc.Resilience output it also covers is internal already.
+      ZeroAlloc.Rest output it also covers is internal already.
     -->
     <ZeroAllocGeneratedAccessibility>Internal</ZeroAllocGeneratedAccessibility>
   </PropertyGroup>

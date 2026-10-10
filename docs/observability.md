@@ -87,9 +87,10 @@ such as a JSON console or Serilog, receives each `{Placeholder}` below as a fiel
 
 A call logs once, when it completes, and logs again for each attempt it is about to retry.
 
-- **`Operation`** names the call: `evaluate` for the raw `EvaluateAsync(SystemOneRequest)`, `evaluate-typed` for the
-  typed overloads, `evaluate-built-set` for a [built question set](question-sets-at-run-time.md), and `list-models` for
-  model listing.
+- **`Operation`** names the call: `evaluate` for the raw `EvaluateAsync(SystemOneRequest)`, `evaluate-set` for every
+  `EvaluateAsync(DecisionRequest)` call, the typed overloads and a [built question set](question-sets-at-run-time.md)
+  included, and `list-models` for model listing. An `evaluate-set` event logs `Provider` as the client's telemetry
+  name, such as `typesafe`; the raw calls log it as `TypeSafe` or `OpenRouter`.
 - **Success** is a Debug event, 1001 for an evaluation and 1004 for a model listing. `QuestionCount` is the number of
   questions asked.
 - **Failure** is a Warning, 1002 or 1005. It covers every failure the call returns as a
@@ -298,7 +299,7 @@ named `minos.*`.
 | `gen_ai.request.model` | start | The requested model. Evaluations only. |
 | `server.address` | start | The host of the base address. |
 | `server.port` | start | The port of the base address. |
-| `minos.operation` | start | `evaluate`, `evaluate-typed`, `evaluate-built-set` or `list-models`, as in the logs. |
+| `minos.operation` | start | `evaluate`, `evaluate-set` or `list-models`, as in the logs. |
 | `minos.request.question_count` | start | The number of questions. Evaluations only. |
 | `gen_ai.response.model` | success | The model that answered. Evaluations only. |
 | `gen_ai.usage.input_tokens` | success | The input tokens. Evaluations only. |

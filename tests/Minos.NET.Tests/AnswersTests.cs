@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using Minos.Protocols;
+using ZeroAlloc.Results;
 using ZeroAlloc.TestHelpers;
 
 namespace Minos.Tests;
@@ -149,7 +151,7 @@ public sealed class AnswersTests
     {
         var (set, _, _) = KeyedSet();
 
-        var result = TypedEvaluation.ParseResponse(Encoding.UTF8.GetBytes("""{"answers":{"extra":{"type":"noul","noul":1}}}"""), set.Parser);
+        var result = Read(set, Encoding.UTF8.GetBytes("""{"answers":{"extra":{"type":"noul","noul":1}}}"""));
 
         Assert.True(result.IsFailure);
         Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
@@ -273,7 +275,7 @@ public sealed class AnswersTests
         var (set, _) = ManyNoulSet(257);
         var response = "{\"answers\":{" + string.Join(",", Enumerable.Range(0, 256).Select(i => $"\"q{i}\":{{\"type\":\"noul\",\"noul\":0.5}}")) + "}}";
 
-        var result = TypedEvaluation.ParseResponse(Encoding.UTF8.GetBytes(response), set.Parser);
+        var result = Read(set, Encoding.UTF8.GetBytes(response));
 
         Assert.True(result.IsFailure);
         Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
@@ -314,9 +316,18 @@ public sealed class AnswersTests
 
     private static Answers Parse(QuestionSet set, string response)
     {
-        var result = TypedEvaluation.ParseResponse(Encoding.UTF8.GetBytes(response), set.Parser);
+        var result = Read(set, Encoding.UTF8.GetBytes(response));
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error.ToString() : null);
         return result.Value;
+    }
+
+    // Reads the whole body through the protocol, as the built-set extension does, and builds the answers from its slots.
+    private static Result<Answers, DecisionError> Read(QuestionSet set, byte[] response)
+    {
+        var read = SystemOneProtocol.Instance.ReadResponse(response, set.Definition);
+        return read.IsSuccess
+            ? Result<Answers, DecisionError>.Success(new Answers(set, read.Value.Probabilities, read.Value.Slots))
+            : Result<Answers, DecisionError>.Failure(read.Error);
     }
 
     private static QuestionSet Built(QuestionSetBuilder builder)

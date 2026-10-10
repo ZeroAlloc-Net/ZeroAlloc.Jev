@@ -44,6 +44,32 @@ internal sealed class DecisionRetry
             && result.Error.Kind != DecisionErrorKind.Disposed
             && _shouldRetry(result.Error);
 
+    /// <summary>
+    /// Retries <paramref name="first"/> while <see cref="WillRetry"/> says so. A first call that completed synchronously with
+    /// a result that is not retried is returned as is, with no state machine.
+    /// </summary>
+    /// <typeparam name="TState">The state type.</typeparam>
+    /// <typeparam name="T">The success type.</typeparam>
+    /// <param name="first">The first attempt's call, already started.</param>
+    /// <param name="state">Passed to <paramref name="attempt"/>.</param>
+    /// <param name="attempt">Starts the attempt with the given 1-based retry number.</param>
+    /// <param name="ct">Cancels the waits; each attempt receives it too.</param>
+    /// <returns>The last attempt's result.</returns>
+    public ValueTask<Result<T, DecisionError>> RunAsync<TState, T>(
+        ValueTask<Result<T, DecisionError>> first,
+        TState state,
+        Func<TState, int, CancellationToken, ValueTask<Result<T, DecisionError>>> attempt,
+        CancellationToken ct)
+    {
+        if (!first.IsCompletedSuccessfully)
+        {
+            return AwaitThenRetryAsync(first, state, attempt, ct);
+        }
+
+        var done = first.Result;
+        return WillRetry(done, 0) ? ContinueAsync(done, state, attempt, ct) : new(done);
+    }
+
     /// <summary>Awaits <paramref name="first"/>, then retries while <see cref="WillRetry"/> says so.</summary>
     /// <typeparam name="TState">The state type.</typeparam>
     /// <typeparam name="T">The success type.</typeparam>
@@ -52,7 +78,7 @@ internal sealed class DecisionRetry
     /// <param name="attempt">Starts the attempt with the given 1-based retry number.</param>
     /// <param name="ct">Cancels the waits; each attempt receives it too.</param>
     /// <returns>The last attempt's result.</returns>
-    public async ValueTask<Result<T, DecisionError>> RunAsync<TState, T>(
+    private async ValueTask<Result<T, DecisionError>> AwaitThenRetryAsync<TState, T>(
         ValueTask<Result<T, DecisionError>> first,
         TState state,
         Func<TState, int, CancellationToken, ValueTask<Result<T, DecisionError>>> attempt,
@@ -74,7 +100,7 @@ internal sealed class DecisionRetry
     /// <param name="attempt">Starts the attempt with the given 1-based retry number.</param>
     /// <param name="ct">Cancels the waits; each attempt receives it too.</param>
     /// <returns>The last attempt's result.</returns>
-    public async ValueTask<Result<T, DecisionError>> ContinueAsync<TState, T>(
+    private async ValueTask<Result<T, DecisionError>> ContinueAsync<TState, T>(
         Result<T, DecisionError> failed,
         TState state,
         Func<TState, int, CancellationToken, ValueTask<Result<T, DecisionError>>> attempt,

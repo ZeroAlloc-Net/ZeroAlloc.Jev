@@ -20,12 +20,6 @@ internal static partial class DecisionLog
     /// <summary>The operation name of <see cref="DecisionClient.EvaluateAsync(SystemOneRequest, CancellationToken)"/>.</summary>
     public const string Evaluate = "evaluate";
 
-    /// <summary>The operation name of the typed <c>EvaluateAsync&lt;T&gt;</c> overloads.</summary>
-    public const string EvaluateTyped = "evaluate-typed";
-
-    /// <summary>The operation name of <see cref="DecisionClient.EvaluateAsync(QuestionSet, DecisionContent, CancellationToken)"/>.</summary>
-    public const string EvaluateBuiltSet = "evaluate-built-set";
-
     /// <summary>The operation name of every neutral <see cref="IDecisionClient.EvaluateAsync"/> call, typed and built sets included.</summary>
     public const string EvaluateSet = "evaluate-set";
 

@@ -40,6 +40,22 @@ public sealed class OpenTelemetryDecisionClientTests
         }
     }
 
+    // Throws after yielding, so the call completes asynchronously with the exception.
+    private sealed class Throwing(Exception thrown) : IDecisionClient
+    {
+        public async ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            throw thrown;
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
     private sealed class Bare(Result<DecisionResponse, DecisionError> result) : IDecisionClient
     {
         public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
@@ -173,6 +189,7 @@ public sealed class OpenTelemetryDecisionClientTests
         Assert.True((await pending.Task).IsSuccess);
         Assert.True(call.IsCompleted);
     }
+
     [Fact]
     public async Task One_span_covers_every_retry()
     {
@@ -187,6 +204,90 @@ public sealed class OpenTelemetryDecisionClientTests
         var span = capture.Span();
         Assert.Equal(ActivityStatusCode.Unset, span.Status);
         Assert.Equal("minos-1", span.GetTagItem("gen_ai.response.model"));
+    }
+
+    // Moved from OperationsProxyTests, whose typed and built-set operations the stage replaces.
+    [Fact]
+    public async Task Success_metrics_carry_exactly_the_gen_ai_tags()
+    {
+        using var capture = new TelemetryCapture();
+        using var stage = new OpenTelemetryDecisionClient(new Scripted(OkWithEnvelope()));
+
+        await stage.EvaluateAsync(Request);
+
+        Assert.Equal(
+            ["gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.response.model", "server.address", "server.port"],
+            capture.OnlyPoint("gen_ai.client.operation.duration").TagNames);
+        foreach (var metric in new[] { "gen_ai.client.inference.operation.input_tokens", "gen_ai.client.inference.operation.output_tokens" })
+        {
+            var point = capture.OnlyPoint(metric);
+            Assert.Equal(["gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.response.model"], point.TagNames);
+            Assert.Equal("minos-default", point.Tag("gen_ai.request.model"));
+            Assert.Equal("typesafe", point.Tag("gen_ai.provider.name"));
+        }
+
+        foreach (var metric in new[] { "gen_ai.client.inference.usage.input_tokens", "gen_ai.client.inference.usage.output_tokens" })
+        {
+            var point = capture.OnlyPoint(metric);
+            Assert.Equal(["gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "gen_ai.token.modality"], point.TagNames);
+            Assert.Equal("text", point.Tag("gen_ai.token.modality"));
+        }
+
+        Assert.All(
+            capture.Points("minos.answer.confidence"),
+            point => Assert.Equal(["gen_ai.operation.name", "gen_ai.provider.name", "gen_ai.request.model", "minos.operation"], point.TagNames));
+    }
+
+    // Moved from OperationsProxyTests: a failure records only the duration, and no tag carries the error's message.
+    [Fact]
+    public async Task Failure_records_only_the_duration_and_never_the_message()
+    {
+        const string Message = "a message that must not leak";
+        using var capture = new TelemetryCapture();
+        using var stage = new OpenTelemetryDecisionClient(new Scripted(
+            Result<DecisionResponse, DecisionError>.Failure(new DecisionError(DecisionErrorKind.RateLimited, Message) { StatusCode = 429 })));
+
+        Assert.True((await stage.EvaluateAsync(Request)).IsFailure);
+
+        var span = capture.Span();
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+        Assert.Null(span.StatusDescription);
+        Assert.Null(span.GetTagItem("gen_ai.response.model"));
+        var point = capture.OnlyPoint();
+        Assert.Equal("gen_ai.client.operation.duration", point.Metric);
+        Assert.Equal("RateLimited", point.Tag("error.type"));
+        Assert.Null(point.Tag("gen_ai.response.model"));
+        KeyValuePair<string, object?>[] emitted = [.. span.TagObjects, .. capture.StartTags(), .. point.Tags];
+        Assert.NotEmpty(emitted);
+        Assert.DoesNotContain(emitted, tag => tag.Value is string text && text.Contains(Message, StringComparison.Ordinal));
+        Assert.DoesNotContain(Message, span.DisplayName, StringComparison.Ordinal);
+    }
+
+    // Moved from OperationsProxyTests.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_thrown_or_cancelled_call_sets_error_type_to_the_exception_name_and_leaves_its_message_out(bool cancelled)
+    {
+        const string Message = "an exception message that must not leak";
+        using var capture = new TelemetryCapture();
+        Exception thrown = cancelled ? new OperationCanceledException(Message) : new InvalidOperationException(Message);
+        using var stage = new OpenTelemetryDecisionClient(new Throwing(thrown));
+
+        Assert.Same(thrown, await Assert.ThrowsAnyAsync<Exception>(async () => await stage.EvaluateAsync(Request)));
+
+        var span = capture.Span();
+        Assert.Equal("evaluate-set", capture.StartTags().Tag("minos.operation"));
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+        Assert.True(string.IsNullOrEmpty(span.StatusDescription));
+        Assert.Equal(thrown.GetType().FullName, span.GetTagItem("error.type"));
+        var point = capture.OnlyPoint();
+        Assert.Equal("gen_ai.client.operation.duration", point.Metric);
+        Assert.Equal(1, point.Tags.Count(tag => string.Equals(tag.Key, "error.type", StringComparison.Ordinal)));
+        Assert.Equal(thrown.GetType().FullName, point.Tag("error.type"));
+        KeyValuePair<string, object?>[] emitted = [.. span.TagObjects, .. capture.StartTags(), .. point.Tags];
+        Assert.DoesNotContain(emitted, tag => tag.Value is string text && text.Contains(Message, StringComparison.Ordinal));
+        Assert.DoesNotContain(Message, span.DisplayName, StringComparison.Ordinal);
     }
 
     [Fact]

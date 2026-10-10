@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using Minos.Protocols;
 using Minos.Transport;
 using ZeroAlloc.Results;
@@ -38,16 +39,25 @@ internal static class ClientTestKit
         return JsonNode.Parse(Encoding.UTF8.GetString(body.Span))!;
     }
 
-    /// <summary>Creates a client over <paramref name="handler"/>; the caller disposes <paramref name="httpClients"/>.</summary>
+    /// <summary>
+    /// Creates a client over <paramref name="handler"/>; the caller disposes <paramref name="httpClients"/>. It does not
+    /// retry unless <paramref name="configure"/>, which runs on the options before they are resolved, says so.
+    /// </summary>
     public static DecisionClient Client(
-        List<HttpClient> httpClients, StubHandler handler, CountingPool? pool = null, DecisionProvider provider = DecisionProvider.TypeSafe)
+        List<HttpClient> httpClients,
+        StubHandler handler,
+        CountingPool? pool = null,
+        DecisionProvider provider = DecisionProvider.TypeSafe,
+        ILoggerFactory? loggerFactory = null,
+        Action<DecisionClientOptions>? configure = null)
     {
         var http = new HttpClient(handler);
         httpClients.Add(http);
-        var settings = DecisionClientSettings.Resolve(
-            new DecisionClientOptions { ApiKey = "test-key", Provider = provider, Model = TestModel, MaxRetries = 0 },
-            _ => null);
-        return new DecisionClient(settings, http, ownedHandler: null, TimeProvider.System, pool ?? new CountingPool());
+        var options = new DecisionClientOptions { ApiKey = "test-key", Provider = provider, Model = TestModel, MaxRetries = 0 };
+        configure?.Invoke(options);
+        var settings = DecisionClientSettings.Resolve(options, _ => null);
+        return new DecisionClient(
+            settings, http, ownedHandler: null, TimeProvider.System, pool ?? new CountingPool(), loggerFactory?.CreateLogger(DecisionLog.Category));
     }
 
     /// <summary>

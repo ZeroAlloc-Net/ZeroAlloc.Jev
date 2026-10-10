@@ -114,7 +114,7 @@ public sealed class DecisionTransportTests : IDisposable
         var http = new HttpClient(handler);
         _httpClients.Add(http);
         var settings = DecisionClientSettings.Resolve(
-            new DecisionClientOptions { ApiKey = "test-key", Model = ClientTestKit.TestModel, MaxRetries = 3, InitialBackoff = TimeSpan.FromMilliseconds(1) },
+            new DecisionClientOptions { ApiKey = "test-key", Model = ClientTestKit.TestModel, MaxRetries = 3, InitialBackoff = TimeSpan.FromMilliseconds(1), UseStandardPipeline = false },
             _ => null);
         using var client = new DecisionClient(settings, http, ownedHandler: null, TimeProvider.System);
 

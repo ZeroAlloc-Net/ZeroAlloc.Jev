@@ -43,7 +43,7 @@ internal static class DecisionTelemetry
     /// <summary>The <see cref="DecisionErrorKind"/> name of a failure.</summary>
     public const string ErrorType = "error.type";
 
-    /// <summary>The client's operation, the logging operation names: <c>evaluate</c>, <c>evaluate-typed</c>, <c>evaluate-built-set</c> or <c>list-models</c>.</summary>
+    /// <summary>The client's operation, the logging operation names: <c>evaluate</c>, <c>evaluate-set</c> or <c>list-models</c>.</summary>
     public const string DecisionOperation = "minos.operation";
 
     /// <summary>The number of questions asked.</summary>

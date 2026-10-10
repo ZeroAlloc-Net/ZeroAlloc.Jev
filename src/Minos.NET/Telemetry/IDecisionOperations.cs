@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Minos.Transport;
 using ZeroAlloc.Results;
 using ZeroAlloc.Telemetry;
 using static Minos.Telemetry.DecisionTelemetry;
@@ -7,9 +6,10 @@ using static Minos.Telemetry.DecisionTelemetry;
 namespace Minos.Telemetry;
 
 /// <summary>
-/// The client's four operations, instrumented: ZeroAlloc.Telemetry generates <c>DecisionOperationsInstrumented</c>, which
-/// opens one CLIENT span per call and records the GenAI and <c>minos.*</c> metrics. With nothing listening the proxy returns
-/// the inner call's task itself. Span and metric tags never carry request or answer content.
+/// The client's two raw System One operations, instrumented: ZeroAlloc.Telemetry generates
+/// <c>DecisionOperationsInstrumented</c>, which opens one CLIENT span per call and records the GenAI and <c>minos.*</c>
+/// metrics. With nothing listening the proxy returns the inner call's task itself. Span and metric tags never carry
+/// request or answer content.
 /// </summary>
 /// <remarks>
 /// The bucket literals repeat <see cref="DecisionTelemetry.DurationBuckets"/>, <see cref="DecisionTelemetry.TokenBuckets"/> and
@@ -48,85 +48,6 @@ internal interface IDecisionOperations
         [TraceTag(QuestionCount, "Questions.Count")]
         [MetricTag(RequestModel, "Model")]
         SystemOneRequest request,
-        [TraceTag(ProviderName)]
-        [MetricTag(ProviderName)]
-        string provider,
-        [TraceTag(ServerAddress, "Host")]
-        [TraceTag(ServerPort, "Port")]
-        [MetricTag(ServerAddress, "Host", Metric = OperationDuration)]
-        [MetricTag(ServerPort, "Port", Metric = OperationDuration)]
-        Uri endpoint,
-        CancellationToken ct);
-
-    /// <summary>Evaluates a generated set from its pre-written request; owns and disposes <paramref name="body"/>.</summary>
-    [Trace("evaluate {model}", Kind = ActivityKind.Client, ErrorWhen = "IsFailure", TagsAtStart = true, ExceptionDescription = false)]
-    [TraceTagConstant(OperationName, EvaluateOperation)]
-    [TraceTagConstant(DecisionOperation, DecisionLog.EvaluateTyped)]
-    [TraceTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess")]
-    [TraceTagFromResult(InputTokens, "Value.InputTokens", When = "IsSuccess")]
-    [TraceTagFromResult(OutputTokens, "Value.OutputTokens", When = "IsSuccess")]
-    [TraceTagFromResult(ErrorType, "Error.ErrorType", When = "IsFailure")]
-    [Histogram(OperationDuration, Unit = Seconds, Buckets = new[] { 0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92 })]
-    [HistogramFromResult(InputTokenHistogram, "Value.InputTokens", When = "IsSuccess", Unit = Tokens, Buckets = new[] { 1d, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864 })]
-    [HistogramFromResult(OutputTokenHistogram, "Value.OutputTokens", When = "IsSuccess", Unit = Tokens, Buckets = new[] { 1d, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864 })]
-    [CountFromResult(InputTokenCounter, "Value.InputTokens", When = "IsSuccess", Unit = Tokens)]
-    [CountFromResult(OutputTokenCounter, "Value.OutputTokens", When = "IsSuccess", Unit = Tokens)]
-    [HistogramFromResult(AnswerConfidence, "Value.Confidences", When = "IsSuccess", Each = true, Unit = Ratio, Buckets = new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99 })]
-    [MetricTagConstant(OperationName, EvaluateOperation)]
-    [MetricTagConstant(TokenModality, Text, Metric = InputTokenCounter)]
-    [MetricTagConstant(TokenModality, Text, Metric = OutputTokenCounter)]
-    [MetricTagConstant(DecisionOperation, DecisionLog.EvaluateTyped, Metric = AnswerConfidence)]
-    [MetricTagFromResult(ErrorType, "Error.ErrorType", When = "IsFailure", Metric = OperationDuration)]
-    [MetricTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess", Metric = OperationDuration)]
-    [MetricTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess", Metric = InputTokenHistogram)]
-    [MetricTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess", Metric = OutputTokenHistogram)]
-    ValueTask<Result<Evaluated<T>, DecisionError>> EvaluateTypedAsync<T>(
-        RawJson body,
-        [TraceTag(RequestModel)]
-        [MetricTag(RequestModel)]
-        string model,
-        [TraceTag(ProviderName)]
-        [MetricTag(ProviderName)]
-        string provider,
-        [TraceTag(ServerAddress, "Host")]
-        [TraceTag(ServerPort, "Port")]
-        [MetricTag(ServerAddress, "Host", Metric = OperationDuration)]
-        [MetricTag(ServerPort, "Port", Metric = OperationDuration)]
-        Uri endpoint,
-        [TraceTag(QuestionCount)]
-        int questionCount,
-        CancellationToken ct)
-        where T : IQuestionSet<T>;
-
-    /// <summary>Evaluates a built set from its pre-written request; owns and disposes <paramref name="body"/>.</summary>
-    [Trace("evaluate {model}", Kind = ActivityKind.Client, ErrorWhen = "IsFailure", TagsAtStart = true, ExceptionDescription = false)]
-    [TraceTagConstant(OperationName, EvaluateOperation)]
-    [TraceTagConstant(DecisionOperation, DecisionLog.EvaluateBuiltSet)]
-    [TraceTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess")]
-    [TraceTagFromResult(InputTokens, "Value.InputTokens", When = "IsSuccess")]
-    [TraceTagFromResult(OutputTokens, "Value.OutputTokens", When = "IsSuccess")]
-    [TraceTagFromResult(ErrorType, "Error.ErrorType", When = "IsFailure")]
-    [Histogram(OperationDuration, Unit = Seconds, Buckets = new[] { 0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28, 2.56, 5.12, 10.24, 20.48, 40.96, 81.92 })]
-    [HistogramFromResult(InputTokenHistogram, "Value.InputTokens", When = "IsSuccess", Unit = Tokens, Buckets = new[] { 1d, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864 })]
-    [HistogramFromResult(OutputTokenHistogram, "Value.OutputTokens", When = "IsSuccess", Unit = Tokens, Buckets = new[] { 1d, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864 })]
-    [CountFromResult(InputTokenCounter, "Value.InputTokens", When = "IsSuccess", Unit = Tokens)]
-    [CountFromResult(OutputTokenCounter, "Value.OutputTokens", When = "IsSuccess", Unit = Tokens)]
-    [HistogramFromResult(AnswerConfidence, "Value.Confidences", When = "IsSuccess", Each = true, Unit = Ratio, Buckets = new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99 })]
-    [MetricTagConstant(OperationName, EvaluateOperation)]
-    [MetricTagConstant(TokenModality, Text, Metric = InputTokenCounter)]
-    [MetricTagConstant(TokenModality, Text, Metric = OutputTokenCounter)]
-    [MetricTagConstant(DecisionOperation, DecisionLog.EvaluateBuiltSet, Metric = AnswerConfidence)]
-    [MetricTagFromResult(ErrorType, "Error.ErrorType", When = "IsFailure", Metric = OperationDuration)]
-    [MetricTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess", Metric = OperationDuration)]
-    [MetricTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess", Metric = InputTokenHistogram)]
-    [MetricTagFromResult(ResponseModel, "Value.ResponseModel", When = "IsSuccess", Metric = OutputTokenHistogram)]
-    ValueTask<Result<Evaluated<Answers>, DecisionError>> EvaluateBuiltSetAsync(
-        RawJson body,
-        [TraceTag(QuestionCount, "Definition.Questions.Count")]
-        QuestionSet questionSet,
-        [TraceTag(RequestModel)]
-        [MetricTag(RequestModel)]
-        string model,
         [TraceTag(ProviderName)]
         [MetricTag(ProviderName)]
         string provider,

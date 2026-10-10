@@ -74,11 +74,11 @@ public sealed partial class ObservabilityLoggingTests
         Assert.Equal("EvaluationSucceeded", record.Id.Name);
         Assert.Equal(LogLevel.Debug, record.Level);
         Assert.Equal("Minos.DecisionClient", record.Category);
-        Assert.Equal("evaluate-typed", Field(record, "Operation"));
+        Assert.Equal("evaluate-set", Field(record, "Operation"));
         Assert.Equal("jev-latest", Field(record, "Model"));
-        Assert.Equal("TypeSafe", Field(record, "Provider"));
+        Assert.Equal("typesafe", Field(record, "Provider"));
         Assert.Equal("1", Field(record, "QuestionCount"));
-        Assert.Matches(@"^Minos evaluate-typed on jev-latest via TypeSafe succeeded: 1 questions in [0-9.,]+ ms\.$", record.Message);
+        Assert.Matches(@"^Minos evaluate-set on jev-latest via typesafe succeeded: 1 questions in [0-9.,]+ ms\.$", record.Message);
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed partial class ObservabilityLoggingTests
         Assert.Equal(LogLevel.Warning, records[1].Level);
         Assert.Equal("Server", Field(records[1], "ErrorKind"));
         Assert.Equal("500", Field(records[1], "StatusCode"));
-        Assert.Equal("evaluate-typed", Field(records[1], "Operation"));
+        Assert.Equal("evaluate-set", Field(records[1], "Operation"));
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed partial class ObservabilityLoggingTests
         Assert.Equal(1006, record.Id.Id);
         Assert.Equal(LogLevel.Error, record.Level);
         Assert.Same(thrown, record.Exception);
-        Assert.Equal("evaluate-typed", Field(record, "Operation"));
+        Assert.Equal("evaluate-set", Field(record, "Operation"));
 
         provider.Collector.Clear();
         using var cancelled = new CancellationTokenSource();

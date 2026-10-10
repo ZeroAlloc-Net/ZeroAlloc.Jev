@@ -76,7 +76,7 @@ public sealed class DecisionErrorMapperTests
         Assert.Same(cancelled, timeout.Exception);
         Assert.Equal(DecisionErrorKind.Disposed, transport.Kind);
         Assert.Same(refused, transport.Exception);
-        Assert.False(IDecisionApi.IsTransient(timeout));
+        Assert.False(DecisionRetryOptions.IsTransient(timeout));
     }
 
     // The flag is read when the failure is mapped: a time-out mapped before the disposal stays Timeout.

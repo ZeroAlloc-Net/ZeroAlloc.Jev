@@ -15,7 +15,8 @@ internal sealed class DecisionClientSettings
         int maxRetries,
         TimeSpan initialBackoff,
         TimeSpan maxRetryDelay,
-        bool jitter)
+        bool jitter,
+        bool useStandardPipeline)
     {
         Provider = provider;
         ApiKey = apiKey;
@@ -26,6 +27,7 @@ internal sealed class DecisionClientSettings
         InitialBackoff = initialBackoff;
         MaxRetryDelay = maxRetryDelay;
         Jitter = jitter;
+        UseStandardPipeline = useStandardPipeline;
     }
 
     // The longest span HttpClient.Timeout accepts, and the cap on the back-off options.
@@ -48,6 +50,8 @@ internal sealed class DecisionClientSettings
     public TimeSpan MaxRetryDelay { get; }
 
     public bool Jitter { get; }
+
+    public bool UseStandardPipeline { get; }
 
     /// <summary>Resolves options: explicit values first, then environment variables, then provider defaults.</summary>
     /// <param name="options">The caller's options, or <see langword="null"/> for all defaults.</param>
@@ -82,7 +86,8 @@ internal sealed class DecisionClientSettings
             options.MaxRetries,
             options.InitialBackoff,
             options.MaxRetryDelay,
-            options.Jitter);
+            options.Jitter,
+            options.UseStandardPipeline);
     }
 
     /// <summary>

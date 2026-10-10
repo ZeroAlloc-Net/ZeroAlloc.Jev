@@ -5,6 +5,9 @@ namespace Minos;
 /// <summary>A provider-neutral evaluation result: the answers in definition order, and what the provider reported about the call.</summary>
 public sealed class DecisionResponse
 {
+    // Set by the public constructor; a read response builds it on first access from the token counts it read.
+    private DecisionUsage? _usage;
+
     /// <summary>Initializes a new instance of the <see cref="DecisionResponse"/> class from answers, such as for a test fake.</summary>
     /// <param name="definition">The questions the answers belong to.</param>
     /// <param name="answers">One answer per question, in definition order, made with the <see cref="QuestionAnswer"/> factories.</param>
@@ -67,7 +70,7 @@ public sealed class DecisionResponse
         Slots = slots;
         Probabilities = probabilities;
         Model = model;
-        Usage = usage;
+        _usage = usage;
         InputTokens = usage?.InputTokens;
         OutputTokens = usage?.OutputTokens;
         Cost = usage?.Cost;
@@ -93,9 +96,6 @@ public sealed class DecisionResponse
         Cost = cost;
         Id = id;
         Provider = provider;
-        Usage = inputTokens is { } input && outputTokens is { } output
-            ? new DecisionUsage { InputTokens = input, OutputTokens = output, Cost = cost }
-            : null;
     }
 
     /// <summary>Gets the questions the answers belong to.</summary>
@@ -108,7 +108,11 @@ public sealed class DecisionResponse
     public string? Model { get; }
 
     /// <summary>Gets the token usage, or <see langword="null"/> when the provider did not report both token counts.</summary>
-    public DecisionUsage? Usage { get; }
+    /// <remarks>A read response creates it on first access, so a call that never reads it does not allocate it.</remarks>
+    public DecisionUsage? Usage
+        => _usage ??= InputTokens is { } input && OutputTokens is { } output
+            ? new DecisionUsage { InputTokens = input, OutputTokens = output, Cost = Cost }
+            : null;
 
     /// <summary>Gets the provider's response id, if any.</summary>
     public string? Id { get; }

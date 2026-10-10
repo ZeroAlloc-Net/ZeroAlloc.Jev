@@ -14,9 +14,19 @@ internal static class SystemOneResponseReader
     private static readonly AnswerFactory<(AnswerSlot[] Slots, double[] Probabilities)> Capture
         = static slots => (slots.HeapSlots ?? slots.Slots.ToArray(), slots.Probabilities);
 
+    // Utf8JsonReader treats a leading UTF-8 BOM as an invalid start of a value, while the raw path's stream-based
+    // deserializer skips one; a body read here must match that tolerance.
+    // The last model and provider read. A client meets few distinct values, so one that matches the last is returned as
+    // that same string instead of a new one per response. A race only replaces the cached value; any string returned
+    // equals the bytes read.
+    private static string? lastModel;
+    private static string? lastProvider;
+
+    private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];
+
     public static Result<DecisionResponse, DecisionError> Read(SystemOneProtocol protocol, ReadOnlySpan<byte> body, QuestionSetDefinition definition)
     {
-        var reader = new Utf8JsonReader(TypedEvaluation.SkipUtf8Bom(body));
+        var reader = new Utf8JsonReader(SkipUtf8Bom(body));
         try
         {
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
@@ -56,7 +66,7 @@ internal static class SystemOneResponseReader
                     else
                     {
                         modelSeen = true;
-                        model = StringOrSkip(ref reader);
+                        model = CachedStringOrSkip(ref reader, ref lastModel);
                     }
                 }
                 else if (reader.ValueTextEquals("id"u8))
@@ -82,7 +92,7 @@ internal static class SystemOneResponseReader
                     else
                     {
                         providerSeen = true;
-                        provider = StringOrSkip(ref reader);
+                        provider = CachedStringOrSkip(ref reader, ref lastProvider);
                     }
                 }
                 else if (reader.ValueTextEquals("usage"u8))
@@ -123,6 +133,25 @@ internal static class SystemOneResponseReader
                 Exception = exception,
             });
         }
+    }
+
+    internal static string? CachedStringOrSkip(ref Utf8JsonReader reader, ref string? cache)
+    {
+        if (reader.TokenType != JsonTokenType.String)
+        {
+            reader.Skip();
+            return null;
+        }
+
+        var cached = Volatile.Read(ref cache);
+        if (cached is not null && reader.ValueTextEquals(cached))
+        {
+            return cached;
+        }
+
+        var value = reader.GetString();
+        Volatile.Write(ref cache, value);
+        return value;
     }
 
     private static string? StringOrSkip(ref Utf8JsonReader reader)
@@ -172,4 +201,7 @@ internal static class SystemOneResponseReader
 
     private static Result<DecisionResponse, DecisionError> Invalid(string message)
         => Result<DecisionResponse, DecisionError>.Failure(new DecisionError(DecisionErrorKind.InvalidResponse, message) { StatusCode = 200 });
+
+    private static ReadOnlySpan<byte> SkipUtf8Bom(ReadOnlySpan<byte> json)
+        => json.StartsWith(Utf8Bom) ? json[Utf8Bom.Length..] : json;
 }

@@ -131,6 +131,7 @@ public sealed class SystemOneResponseReaderTests
 
     [Theory]
     [InlineData("[]", "The response body is not a JSON object.")]
+    [InlineData("[1]", "The response body is not a JSON object.")]
     [InlineData("""{"model":"m"}""", "The response has no answers.")]
     [InlineData("""{"answers":null}""", "The response's answers are null.")]
     [InlineData("""{"answers":{"is_urgent":{"type":"noul","noul":0.5}},"answers":{}}""", "The response has more than one answers property.")]
@@ -142,31 +143,119 @@ public sealed class SystemOneResponseReaderTests
         Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
         Assert.Equal(message, result.Error.Message);
         Assert.Equal(200, result.Error.StatusCode);
+        Assert.Null(result.Error.Exception);
+    }
+
+    // Moved from TypedEvaluationTests with TypedEvaluation.ParseResponse: the envelope reader replaces it.
+    [Theory]
+    [InlineData("response-noul.json")]
+    [InlineData("response-type-last.json")]
+    [InlineData("response-openrouter.json")]
+    public void Finds_the_answers_in_each_response_fixture(string fixture)
+    {
+        var result = SystemOneProtocol.Instance.ReadResponse(System.Text.Encoding.UTF8.GetBytes(Fixture.Text(fixture)), UrgencyCheck.Definition);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ResponseAnswers.Parse<UrgencyCheck>(Fixture.Text(fixture)), UrgencyCheck.Create(result.Value.ToAnswerSlots()));
     }
 
     [Fact]
-    public void Matches_the_typed_parser_for_every_wire_fixture()
+    public void Answers_before_the_envelope_fields_are_found()
+    {
+        var result = SystemOneProtocol.Instance.ReadResponse(
+            """{"answers":{"is_urgent":{"type":"noul","noul":0.3}},"model":"jev-1.13.0","usage":{"input_tokens":1,"output_tokens":1}}"""u8, Urgency);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0.3, result.Value.Answers[0].Value);
+        Assert.Equal("jev-1.13.0", result.Value.Model);
+    }
+
+    [Fact]
+    public void Nested_answers_properties_are_skipped()
+    {
+        var result = SystemOneProtocol.Instance.ReadResponse(
+            """{"meta":{"answers":{}},"answers":{"is_urgent":{"type":"noul","noul":0.3}},"extra":{"answers":null}}"""u8, Urgency);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0.3, result.Value.Answers[0].Value);
+    }
+
+    [Theory]
+    [InlineData("""{"answers":{"department":{"type":"choice","choice":"billing","probabilities":{},"confidence":1}}}""")]
+    [InlineData("""{"answers":{"is_urgent":{"type":"noul","noul":0.3}},"usage":""")]
+    [InlineData("""{"answers":{"is_urgent":{"type":"noul","noul":0.3}}} trailing""")]
+    [InlineData("""{"answers":{"is_urgent":{"type":"noul","noul":0.3}},"model":tru}""")]
+    [InlineData("")]
+    public void Rejected_or_malformed_bodies_keep_the_json_exception(string json)
+    {
+        var result = SystemOneProtocol.Instance.ReadResponse(System.Text.Encoding.UTF8.GetBytes(json), Urgency);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
+        Assert.Equal(200, result.Error.StatusCode);
+        Assert.IsAssignableFrom<System.Text.Json.JsonException>(result.Error.Exception);
+    }
+
+    [Fact]
+    public void A_string_equal_to_the_cached_one_is_returned_as_that_string()
+    {
+        string? cache = null;
+
+        var first = ReadCached("\"minos-1\""u8, ref cache);
+        var again = ReadCached("\"minos-1\""u8, ref cache);
+        var other = ReadCached("\"minos-2\""u8, ref cache);
+        var notAString = ReadCached("5"u8, ref cache);
+
+        Assert.Equal("minos-1", first);
+        Assert.Same(first, again);
+        Assert.Equal("minos-2", other);
+        Assert.Same(other, cache);
+        Assert.Null(notAString);
+        Assert.Same(other, cache);
+    }
+
+    [Fact]
+    public void Usage_is_built_once_on_first_access()
+    {
+        var response = SystemOneProtocol.Instance.ReadResponse(
+            """{"answers":{"is_urgent":{"type":"noul","noul":0.5}},"usage":{"input_tokens":7,"output_tokens":3,"cost":0.5}}"""u8, Urgency).Value;
+
+        var usage = response.Usage;
+
+        Assert.Equal(new DecisionUsage { InputTokens = 7, OutputTokens = 3, Cost = 0.5 }, usage);
+        Assert.Same(usage, response.Usage);
+    }
+
+    [Fact]
+    public void Matches_the_protocols_answer_reader_for_every_wire_fixture()
     {
         foreach (var (definition, responseJson) in ResponseFixtureSets.Responses())
         {
             var neutral = SystemOneProtocol.Instance.ReadResponse(responseJson, definition);
-            var typed = TypedEvaluation.ParseResponse(responseJson, Capture(definition), statusCode: 200);
 
-            Assert.Equal(typed.IsSuccess, neutral.IsSuccess);
-            if (typed.IsSuccess)
+            (AnswerSlot[] Slots, double[] Probabilities) direct;
+            try
             {
-                Assert.Equal(typed.Value.Slots, neutral.Value.Slots);
-                Assert.Equal(typed.Value.Probabilities, neutral.Value.Probabilities);
+                direct = ResponseAnswers.Read(responseJson, definition, static slots => (slots.Slots.ToArray(), slots.Probabilities));
             }
-            else
+            catch (System.Text.Json.JsonException exception)
             {
-                Assert.Equal(typed.Error.Kind, neutral.Error.Kind);
-                Assert.Equal(typed.Error.Message, neutral.Error.Message);
+                Assert.True(neutral.IsFailure);
+                Assert.Equal(DecisionErrorKind.InvalidResponse, neutral.Error.Kind);
+                Assert.Equal("The response could not be read as the question set's answers: " + exception.Message, neutral.Error.Message);
+                continue;
             }
+
+            Assert.True(neutral.IsSuccess);
+            Assert.Equal(direct.Slots, neutral.Value.Slots);
+            Assert.Equal(direct.Probabilities, neutral.Value.Probabilities);
         }
     }
 
-    private static AnswerParser<(AnswerSlot[] Slots, double[] Probabilities)> Capture(QuestionSetDefinition definition)
-        => (ref System.Text.Json.Utf8JsonReader answers)
-            => SystemOneProtocol.Instance.ReadAnswers(ref answers, definition, static slots => (slots.Slots.ToArray(), slots.Probabilities));
+    private static string? ReadCached(ReadOnlySpan<byte> json, ref string? cache)
+    {
+        var reader = new System.Text.Json.Utf8JsonReader(json);
+        reader.Read();
+        return SystemOneResponseReader.CachedStringOrSkip(ref reader, ref cache);
+    }
 }

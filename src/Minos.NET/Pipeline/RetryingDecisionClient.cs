@@ -38,18 +38,9 @@ public sealed class RetryingDecisionClient : DelegatingDecisionClient
     public override ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var first = InnerClient.EvaluateAsync(request, cancellationToken);
 
         // A completed success, or a failure that will not be retried, is returned as is: no state machine.
-        if (first.IsCompletedSuccessfully)
-        {
-            var done = first.Result;
-            return _retry.WillRetry(done, 0)
-                ? _retry.ContinueAsync(done, (InnerClient, request), Attempt, cancellationToken)
-                : new ValueTask<Result<DecisionResponse, DecisionError>>(done);
-        }
-
-        return _retry.RunAsync(first, (InnerClient, request), Attempt, cancellationToken);
+        return _retry.RunAsync(InnerClient.EvaluateAsync(request, cancellationToken), (InnerClient, request), Attempt, cancellationToken);
     }
 
     /// <inheritdoc />
