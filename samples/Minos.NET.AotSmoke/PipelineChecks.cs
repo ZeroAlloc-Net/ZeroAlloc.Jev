@@ -72,16 +72,19 @@ internal static class PipelineChecks
         var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
 
         var result = await stage.EvaluateAsync(request).ConfigureAwait(false);
-        var self = stage.GetService<CountingStage>();
-        var found = stage.GetService<FixedResponseClient>();
-        var keyed = stage.GetService<CountingStage>(serviceKey: "other");
+
+        // A stage with no overrides, so each GetService call binds to DelegatingDecisionClient's own virtual.
+        var passThrough = new PassThroughStage(inner);
+        var self = passThrough.GetService(typeof(PassThroughStage));
+        var found = passThrough.GetService(typeof(FixedResponseClient));
+        var keyed = passThrough.GetService(typeof(PassThroughStage), serviceKey: "other");
         stage.Dispose();
 
         Program.Check(
             result.IsSuccess && ReferenceEquals(result.Value, inner.Response) && stage.Calls == 1 && ReferenceEquals(inner.LastRequest, request),
             "a DelegatingDecisionClient subclass passes the request to its inner client and returns its response under Native AOT");
         Program.Check(
-            ReferenceEquals(self, stage) && ReferenceEquals(found, inner) && keyed is null,
+            ReferenceEquals(self, passThrough) && ReferenceEquals(found, inner) && keyed is null,
             "a DelegatingDecisionClient finds itself and asks its inner client for anything else under Native AOT");
         Program.Check(
             stage.DisposedWith is true && inner.Disposed,
@@ -262,7 +265,7 @@ internal static class PipelineChecks
     /// pass-through allocation gate measures it.</summary>
     internal sealed class PassThroughStage(IDecisionClient innerClient) : DelegatingDecisionClient(innerClient);
 
-    /// <summary>A stage that counts its calls and records how it was disposed, delegating everything to its base.</summary>
+    /// <summary>A stage that counts its calls and records how it was disposed, delegating both to its base.</summary>
     private sealed class CountingStage(IDecisionClient innerClient) : DelegatingDecisionClient(innerClient)
     {
         public int Calls { get; private set; }
@@ -274,8 +277,6 @@ internal static class PipelineChecks
             Calls++;
             return base.EvaluateAsync(request, cancellationToken);
         }
-
-        public override object? GetService(Type serviceType, object? serviceKey = null) => base.GetService(serviceType, serviceKey);
 
         protected override void Dispose(bool disposing)
         {
@@ -305,28 +306,4 @@ internal static class PipelineChecks
 
         public void Dispose() => _listener.Dispose();
     }
-}
-
-/// <summary>
-/// An inner client that answers every call with the same completed <see cref="DecisionResponse"/>, allocating nothing,
-/// and records the last request and whether it was disposed.
-/// </summary>
-internal sealed class FixedResponseClient(DecisionResponse response) : IDecisionClient
-{
-    public DecisionResponse Response => response;
-
-    public DecisionRequest? LastRequest { get; private set; }
-
-    public bool Disposed { get; private set; }
-
-    public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
-    {
-        LastRequest = request;
-        return new(Result<DecisionResponse, DecisionError>.Success(response));
-    }
-
-    public object? GetService(Type serviceType, object? serviceKey = null)
-        => serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
-
-    public void Dispose() => Disposed = true;
 }

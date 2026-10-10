@@ -4,10 +4,11 @@ using Microsoft.CodeAnalysis.CSharp;
 namespace Minos.AotSmoke.Tests;
 
 /// <summary>
-/// Creating a smoke type reaches its overrides of members declared outside the smoke app, since that code calls them,
-/// as <c>DelegatingDecisionClient.Dispose()</c> calls a stage's protected <c>Dispose(bool)</c>, which no check can call
-/// itself. These tests run the coverage resolver over a small compilation whose base type, <see cref="TextWriter"/>,
-/// comes from metadata, as the packages' types do for the smoke app.
+/// Creating a smoke type reaches its protected overrides of members declared outside the smoke app, since only that
+/// code can call them, as <c>DelegatingDecisionClient.Dispose()</c> calls a stage's protected <c>Dispose(bool)</c>,
+/// which no check can call itself. A public override is not reached by construction: a check calls it itself. These
+/// tests run the coverage resolver over a small compilation whose base type, <see cref="TextWriter"/>, comes from
+/// metadata, as the packages' types do for the smoke app.
 /// </summary>
 public sealed class OverrideReachTests
 {
@@ -24,6 +25,8 @@ public sealed class OverrideReachTests
                 Helpers.Released();
                 base.Dispose(disposing);
             }
+
+            public override void Flush() => Helpers.Flushed();
         }
 
         public class Base : TextWriter
@@ -41,6 +44,10 @@ public sealed class OverrideReachTests
         public static class Helpers
         {
             public static void Released()
+            {
+            }
+
+            public static void Flushed()
             {
             }
 
@@ -65,7 +72,7 @@ public sealed class OverrideReachTests
                 using var derived = new Derived();
             }
 
-            public static void Names(Writer writer) => writer.Flush();
+            public static void Names(Writer writer) => writer.Write('x');
         }
         """;
 
@@ -90,6 +97,10 @@ public sealed class OverrideReachTests
             calls,
             method => string.Equals(method.Name, "Dispose", StringComparison.Ordinal) && method.Parameters.Length == 1 && string.Equals(method.ContainingType.Name, "TextWriter", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Creating_a_type_does_not_reach_its_public_override_of_a_metadata_member()
+        => Assert.DoesNotContain(Member("Helpers", "Flushed"), Calls("Creates"), SymbolEqualityComparer.Default);
 
     [Fact]
     public void Creating_a_type_does_not_reach_an_override_of_a_member_declared_in_source()

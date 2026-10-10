@@ -19,9 +19,9 @@ internal sealed record SmokeCheck(IMethodSymbol Method, List<string> Declared, H
 /// A check calls every method and constructor its body binds to: invocations, object creations, method groups, the
 /// <c>GetEnumerator</c>, <c>MoveNext</c> and <c>Dispose</c> a <c>foreach</c> runs, and, transitively, whatever the
 /// smoke app's own methods, constructors, accessors and lambdas it reaches call in turn, generated code included. A
-/// constructor of a smoke type also calls its base constructor, and reaches the type's overrides of members declared
-/// outside the smoke app, since the code that declares them calls them, as a <c>DelegatingDecisionClient</c>'s
-/// <c>Dispose()</c> calls a stage's <c>Dispose(bool)</c>. A call is matched by the signature of the member it
+/// constructor of a smoke type also calls its base constructor, and reaches the type's protected overrides of members
+/// declared outside the smoke app, since only the code that declares them can call them, as a
+/// <c>DelegatingDecisionClient</c>'s <c>Dispose()</c> calls a stage's <c>Dispose(bool)</c>. A call is matched by the signature of the member it
 /// binds to, so a call on a <c>DecisionClient</c> covers <c>DecisionClient</c>'s member, and a call through an
 /// <c>IDecisionClient</c> covers the interface's. A default interface method counts only when its own body runs: the
 /// receiver's static type, or the type its local was created as, must not override it, so a default called on a
@@ -169,12 +169,16 @@ internal static class SmokeChecks
 
         if (method.MethodKind == MethodKind.Constructor)
         {
-            // Creating a smoke type reaches its overrides of members declared outside the smoke app, since that code
-            // calls them, as DelegatingDecisionClient.Dispose() runs a stage's Dispose(bool). Whether it does in a given
-            // check is left to the check's own runtime assertions.
+            // Creating a smoke type reaches its protected overrides of members declared outside the smoke app, since
+            // only that code can call them, as DelegatingDecisionClient.Dispose() runs a stage's Dispose(bool). A public
+            // override is not reached this way: a check can call it, or the virtual it overrides, itself. Whether the
+            // outside code calls a protected override in a given check is left to the check's runtime assertions.
             foreach (var member in method.ContainingType.GetMembers().OfType<IMethodSymbol>())
             {
-                if (member.IsOverride && member.OverriddenMethod is { } overridden && !IsSource(overridden))
+                if (member.IsOverride
+                    && member.DeclaredAccessibility is Accessibility.Protected or Accessibility.ProtectedOrInternal
+                    && member.OverriddenMethod is { } overridden
+                    && !IsSource(overridden))
                 {
                     yield return member;
                 }
