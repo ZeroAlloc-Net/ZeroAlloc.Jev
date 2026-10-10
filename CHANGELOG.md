@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.8.0](https://github.com/MarcelRoozekrans/Minos.NET/compare/v0.7.0...v0.8.0) (2026-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** IDecisionClient no longer declares the raw EvaluateAsync or ListModelsAsync, and its typed default methods are now extension methods in DecisionClientExtensions. A fake implements EvaluateAsync of a DecisionRequest, GetService and Dispose.
+* **core:** the typed and built-set members of DecisionClient are now extension methods, and UseStandardPipeline set to false leaves the bare transport. minos.operation and the log Operation are evaluate-set for every neutral call, event 1001 logs the provider as its metadata name, and typed spans gain gen_ai.response.id and minos.usage.cost.
+* **di:** every AddDecisionClient overload returns DecisionClientServiceBuilder, and the HttpClient builder is reached through its HttpClient property.
+
+### Features
+
+* **core:** DecisionClient runs the standard pipeline over the neutral transport ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+* **core:** DelegatingDecisionClient, DecisionClientBuilder and AsBuilder for composing pipeline stages ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+* **core:** IDecisionClient is one neutral EvaluateAsync over DecisionRequest ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+* **core:** LoggingDecisionClient stage and UseLogging ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+* **core:** OpenTelemetryDecisionClient stage and UseOpenTelemetry ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+* **core:** RetryingDecisionClient stage, UseRetries and DecisionRetryOptions ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+* **di:** AddDecisionClient returns the pipeline builder of the registration ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+
+
+### Bug Fixes
+
+* **deps:** ZeroAlloc.Rest 3.3.1 so the endpoint path costs nothing ([cc4b223](https://github.com/MarcelRoozekrans/Minos.NET/commit/cc4b223afaff2c1fa86a0650072dc92375da03ce))
+
 ## [0.7.0](https://github.com/MarcelRoozekrans/Minos.NET/compare/v0.6.0...v0.7.0) (2026-10-10)
 
 
