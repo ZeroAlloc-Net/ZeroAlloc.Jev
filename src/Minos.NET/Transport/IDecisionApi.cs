@@ -24,7 +24,7 @@ internal interface IDecisionApi
 
     /// <summary>
     /// The protocol-neutral attempt: POSTs pre-written UTF-8 JSON to <paramref name="path"/>, relative to the base address,
-    /// and returns the raw response body. <c>DecisionTransport</c> sends one attempt through it, passing the protocol's
+    /// and returns the raw response body. <see cref="DecisionTransport"/> sends one attempt through it, passing the protocol's
     /// <see cref="Protocols.IDecisionProtocol.EndpointPath"/>. The caller owns both <see cref="RawJson"/> values.
     /// </summary>
     /// <remarks>
