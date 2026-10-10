@@ -61,6 +61,13 @@ internal static class Program
         await IDecisionClientChecks.TypedExtensionsSendTheStateAndCreateAnswers().ConfigureAwait(false);
         await IDecisionClientChecks.TypedStateExtensionsSendTheStateAndCreateAnswers().ConfigureAwait(false);
         await IDecisionClientChecks.BuiltSetExtensionsSendTheStateAndReadAnswers().ConfigureAwait(false);
+        PipelineChecks.ResponseAnswersEnumerateInDefinitionOrder();
+        PipelineChecks.MetadataDescribesTheClient();
+        await PipelineChecks.CustomStageDelegatesEveryCall().ConfigureAwait(false);
+        await PipelineChecks.BuilderComposesStagesInTheOrderTheyAreAdded().ConfigureAwait(false);
+        await PipelineChecks.StandardStagesBuiltByHandTraceLogAndRetry().ConfigureAwait(false);
+        await PipelineChecks.StandardStagesAddedThroughTheBuilder().ConfigureAwait(false);
+        await PipelineChecks.StandardPipelineCanBeTurnedOff().ConfigureAwait(false);
         DecisionClientOptionsChecks.ValidateAcceptsValidOptionsAndRejectsInvalidOnes();
         DecisionContentChecks.TextContentRoundTrips();
         DecisionContentChecks.JsonContentRoundTrips();
@@ -91,6 +98,11 @@ internal static class Program
         await AllocationChecks.GeneratedCreate().ConfigureAwait(false);
         AllocationChecks.EvaluateRoundTrip();
         AllocationChecks.TypedEvaluateRoundTrip();
+        AllocationChecks.NeutralEvaluateRoundTrip();
+        AllocationChecks.BareTransportRoundTrip();
+        AllocationChecks.PassThroughStage();
+        AllocationChecks.Utf8StateEvaluateRoundTrip();
+        AllocationChecks.TypedStateEvaluateRoundTrip();
         AllocationChecks.EvaluateRoundTripWithNullLoggerFactory();
         AllocationChecks.TypedEvaluateRoundTripWithEveryLevelFiltered();
         AllocationChecks.EvaluateRoundTripWithDiscardingLogger();
@@ -108,6 +120,7 @@ internal static class Program
         await AllocationChecks.TelemetryOffAsynchronousTypedEvaluation().ConfigureAwait(false);
         AllocationChecks.EvaluateRoundTripWhileListening();
         AllocationChecks.TypedEvaluateRoundTripWhileListening();
+        AllocationChecks.NeutralEvaluateRoundTripWhileListening();
         AllocationChecks.EvaluateBuiltSetRoundTripWhileListening();
 
         Console.WriteLine(failures == 0 ? "AOT smoke: all checks passed" : "AOT smoke: " + failures + " check(s) failed");
@@ -223,7 +236,7 @@ internal static class Program
             "a Criterion.Json description is sent as JSON");
     }
 
-    [Covers("Minos.DecisionClient.EvaluateAsync<T>(string! state) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync<T>(this Minos.IDecisionClient! client, string! state) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
     private static async Task TypedEvaluateAsyncParsesAnswers()
     {
         using var http = Http(HttpStatusCode.OK, TriageResponse);
@@ -239,7 +252,7 @@ internal static class Program
             "EvaluateAsync<T>(string) parses typed answers over the raw, pooled-buffer path");
     }
 
-    [Covers("Minos.DecisionClient.EvaluateAsync<T, TState>(TState state, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TState>! stateTypeInfo) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync<T, TState>(this Minos.IDecisionClient! client, TState state, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TState>! stateTypeInfo) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
     private static async Task TypedEvaluateAsyncWithTStateParsesAnswers()
     {
         using var http = Http(HttpStatusCode.OK, CredentialsResponse);
@@ -324,7 +337,7 @@ internal static class Program
     [Covers("Minos.ScoreLevelsBuilder<T>.Level(T level, Minos.Criterion! criterion) -> Minos.ScoreLevelsBuilder<T>!")]
     [Covers("static Minos.Criterion.Text(string! description) -> Minos.Criterion!")]
     [Covers("Minos.Criterion.WithExamples(params System.ReadOnlySpan<string?> examples) -> Minos.Criterion!")]
-    [Covers("Minos.DecisionClient.EvaluateAsync(Minos.QuestionSet! questionSet, Minos.DecisionContent state) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.Answers!, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync(this Minos.IDecisionClient! client, Minos.QuestionSet! questionSet, Minos.DecisionContent state) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.Answers!, Minos.DecisionError!>>")]
     [Covers("Minos.Answers.Get(Minos.NoulHandle question) -> Minos.Noul")]
     [Covers("Minos.Answers.Get(Minos.KeyedChoiceHandle question) -> Minos.KeyedChoice")]
     [Covers("Minos.Answers.Get<T>(Minos.ChoiceHandle<T> question) -> Minos.Choice<T>")]

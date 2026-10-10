@@ -18,8 +18,8 @@ internal static class DependencyInjectionChecks
             })
             .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
 
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Minos.DecisionClientOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Minos.DecisionClientOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Minos.DecisionClientOptions!>! configure) -> Minos.DecisionClientServiceBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Minos.DecisionClientOptions!>! configure) -> Minos.DecisionClientServiceBuilder!")]
     public static async Task DefaultAndKeyedClientsEvaluate()
     {
         var services = new ServiceCollection();
@@ -72,8 +72,8 @@ internal static class DependencyInjectionChecks
             .AddDecisionClient(BoundConfiguration().GetSection("Minos"))
             .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
 
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Minos.DecisionClientServiceBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Minos.DecisionClientServiceBuilder!")]
     public static async Task ClientsBoundFromConfigurationEvaluate()
     {
         var services = new ServiceCollection();
@@ -105,8 +105,8 @@ internal static class DependencyInjectionChecks
             "the default and the keyed client bound from configuration each evaluate under Native AOT");
     }
 
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Minos.DecisionClientServiceBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name) -> Minos.DecisionClientServiceBuilder!")]
     public static async Task ClientsConfiguredFromTheEnvironmentEvaluate()
     {
         using (SmokeAssert.TypeSafeEnvironment())

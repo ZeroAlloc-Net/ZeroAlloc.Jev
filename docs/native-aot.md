@@ -182,6 +182,11 @@ regression cannot reach a release unnoticed.
 | `GeneratedCreate` | The generated `Create` of a typed set building its result from the answer slots, which replaces the old `GeneratedParse` gate of 192. The protocol's probability buffer is counted by the typed round trips and by a test in the unit suite, which holds the whole read to 192. | 128 |
 | `EvaluateRoundTrip` | A raw `EvaluateAsync` call. | 4352 |
 | `TypedEvaluateRoundTrip` | A typed `EvaluateAsync<T>` call. | 3328 |
+| `NeutralEvaluateRoundTrip` | A neutral `EvaluateAsync(DecisionRequest)` call on the standard pipeline. | 3584 |
+| `BareTransportRoundTrip` | A neutral call with `UseStandardPipeline` off, the transport alone. | 3584 |
+| `PassThroughStage` | A `DelegatingDecisionClient` that overrides nothing, over an inner call that completes synchronously. | 0 |
+| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call, which parses its state into a `JsonDocument`. | 4096 |
+| `TypedStateEvaluateRoundTrip` | A typed `EvaluateAsync<T, TState>` call, which serializes its state into a `JsonDocument`. | 3328 |
 | `EvaluateBuiltSetRoundTrip` | An `EvaluateAsync` call over a built set. | 3648 |
 | `BuildQuestionSet` | Building a question set. | 7296 |
 | `ContentFromValue` | `DecisionContent.FromValue`. | 320 |
@@ -193,6 +198,7 @@ regression cannot reach a release unnoticed.
 | `EvaluateRoundTripThroughDependencyInjection` | A raw call through a client resolved from the container, and no more than a hand-built client's own measurement. | 4416 |
 | `EvaluateRoundTripWhileListening` | A raw call with a span and metric listener attached. | 5888 |
 | `TypedEvaluateRoundTripWhileListening` | A typed call with the listeners attached. | 5056 |
+| `NeutralEvaluateRoundTripWhileListening` | A neutral call with the listeners attached. | 5120 |
 | `EvaluateBuiltSetRoundTripWhileListening` | A built-set call with the listeners attached. | 5376 |
 | `EvaluateRoundTripThroughBoundConfiguration` | A raw call through a client bound from configuration, equal to a hand-built client's own measurement. | same as the hand-built client |
 | `DisabledLoggerAddsNothingWhereAnEnabledOneDoes` | Asynchronous calls with no factory, a null factory and an enabled logger. Checks the disabled ones add no more than 16 B per call, a tolerance for the noise of a process-wide counter ([#104](https://github.com/MarcelRoozekrans/Minos.NET/issues/104)). | no byte budget |

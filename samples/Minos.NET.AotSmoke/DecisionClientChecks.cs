@@ -65,7 +65,7 @@ internal static class DecisionClientChecks
         }
     }
 
-    [Covers("Minos.DecisionClient.EvaluateAsync(Minos.QuestionSet! questionSet, Minos.DecisionContent state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.Answers!, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync(this Minos.IDecisionClient! client, Minos.QuestionSet! questionSet, Minos.DecisionContent state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.Answers!, Minos.DecisionError!>>")]
     public static async Task BuiltSetEvaluatesWithACancellationToken()
     {
         var set = SmokeBuiltSet.Full(out var credentials, out var team, out var product, out var urgency);
@@ -81,10 +81,10 @@ internal static class DecisionClientChecks
                 && result.Value.Get(team).Value == Team.Account
                 && string.Equals(result.Value.Get(product).Value, "pro-plan", StringComparison.Ordinal)
                 && result.Value.Get(urgency).Value == Urgency.High,
-            "DecisionClient.EvaluateAsync(set, state, cancellationToken) evaluates a built set under Native AOT");
+            "EvaluateAsync(set, state, cancellationToken) on a DecisionClient evaluates a built set under Native AOT");
     }
 
-    [Covers("Minos.DecisionClient.EvaluateAsync<T>(string! state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync<T>(this Minos.IDecisionClient! client, string! state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
     public static async Task TypedTextStateEvaluatesWithACancellationToken()
     {
         using var http = Program.Http(HttpStatusCode.OK, Program.TriageResponse);
@@ -93,11 +93,11 @@ internal static class DecisionClientChecks
 
         var result = await client.EvaluateAsync<SmokeTriage>(SmokeAnswers.State, cancellation.Token).ConfigureAwait(false);
 
-        Program.Check(SmokeAnswers.IsTriage(result), "DecisionClient.EvaluateAsync<T>(string, cancellationToken) parses typed answers under Native AOT");
+        Program.Check(SmokeAnswers.IsTriage(result), "EvaluateAsync<T>(string, cancellationToken) on a DecisionClient parses typed answers under Native AOT");
     }
 
-    [Covers("Minos.DecisionClient.EvaluateAsync<T>(System.Text.Json.JsonElement state) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
-    [Covers("Minos.DecisionClient.EvaluateAsync<T>(System.Text.Json.JsonElement state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync<T>(this Minos.IDecisionClient! client, System.Text.Json.JsonElement state) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync<T>(this Minos.IDecisionClient! client, System.Text.Json.JsonElement state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
     public static async Task TypedJsonStateEvaluates()
     {
         using var http = Program.Http(HttpStatusCode.OK, Program.TriageResponse);
@@ -110,13 +110,13 @@ internal static class DecisionClientChecks
 
         Program.Check(
             SmokeAnswers.IsTriage(result) && SmokeAnswers.IsTriage(cancellable),
-            "DecisionClient.EvaluateAsync<T>(JsonElement) and its cancellable overload parse typed answers under Native AOT");
+            "EvaluateAsync<T>(JsonElement) and its cancellable overload on a DecisionClient parse typed answers under Native AOT");
         Program.Check(
             await SmokeAssert.ThrowsAsync<ArgumentException>(() => client.EvaluateAsync<SmokeTriage>(default(JsonElement)).AsTask()).ConfigureAwait(false),
-            "DecisionClient.EvaluateAsync<T>(JsonElement) rejects an undefined JSON state under Native AOT");
+            "EvaluateAsync<T>(JsonElement) on a DecisionClient rejects an undefined JSON state under Native AOT");
     }
 
-    [Covers("Minos.DecisionClient.EvaluateUtf8Async<T>(System.ReadOnlyMemory<byte> utf8JsonState, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateUtf8Async<T>(this Minos.IDecisionClient! client, System.ReadOnlyMemory<byte> utf8JsonState) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
     public static async Task TypedUtf8StateEvaluates()
     {
         using var http = Program.Http(HttpStatusCode.OK, Program.TriageResponse);
@@ -125,13 +125,13 @@ internal static class DecisionClientChecks
 
         var result = await client.EvaluateUtf8Async<SmokeTriage>(state).ConfigureAwait(false);
 
-        Program.Check(SmokeAnswers.IsTriage(result), "DecisionClient.EvaluateUtf8Async<T> parses typed answers from a UTF-8 JSON state under Native AOT");
+        Program.Check(SmokeAnswers.IsTriage(result), "EvaluateUtf8Async<T> on a DecisionClient parses typed answers from a UTF-8 JSON state under Native AOT");
         Program.Check(
             await SmokeAssert.ThrowsAsync<ArgumentException>(() => client.EvaluateUtf8Async<SmokeTriage>("{} {}"u8.ToArray()).AsTask()).ConfigureAwait(false),
-            "DecisionClient.EvaluateUtf8Async<T> rejects a state that is not one JSON value under Native AOT");
+            "EvaluateUtf8Async<T> on a DecisionClient rejects a state that is not one JSON value under Native AOT");
     }
 
-    [Covers("Minos.DecisionClient.EvaluateAsync<T, TState>(TState state, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TState>! stateTypeInfo, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("static Minos.DecisionClientExtensions.EvaluateAsync<T, TState>(this Minos.IDecisionClient! client, TState state, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TState>! stateTypeInfo, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
     public static async Task TypedStateEvaluatesWithACancellationToken()
     {
         using var http = Program.Http(HttpStatusCode.OK, Program.CredentialsResponse);
@@ -145,6 +145,6 @@ internal static class DecisionClientChecks
 
         Program.Check(
             result.IsSuccess && !result.Value.RequestsCredentials.Value,
-            "DecisionClient.EvaluateAsync<T, TState>(state, stateTypeInfo, cancellationToken) parses typed answers under Native AOT");
+            "EvaluateAsync<T, TState>(state, stateTypeInfo, cancellationToken) on a DecisionClient parses typed answers under Native AOT");
     }
 }
