@@ -209,8 +209,9 @@ regression cannot reach a release unnoticed.
 | `TelemetryOffAsynchronousTypedEvaluation` | A typed call that completes asynchronously, with nothing listening. The median of five runs. | 4608 |
 
 The two logging rows with a logger that does nothing keep the budgets of the calls without one, because the client takes
-the unlogged path. The two rows with every level on are higher, and the two listening rows show what a span and the
-metrics cost. Each budget has a section in [Performance](performance.md) that explains the measurement behind it. The
+the unlogged path. The two rows with every level on keep them as well, because an enabled logger adds nothing to a call
+that completes synchronously, and the listening rows show what a span and the metrics cost. Each budget has a section in
+[Performance](performance.md) that explains the measurement behind it. The
 phases there are [3.1 for logging](performance.md#phase-31--logging), [3.2 for
 telemetry](performance.md#phase-32--telemetry), [3.3 for dependency injection](performance.md#phase-33--di-package) and
 [6.3 for the client pipeline](performance.md#phase-63--the-client-pipeline).
