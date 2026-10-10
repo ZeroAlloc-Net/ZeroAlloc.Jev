@@ -166,3 +166,8 @@ Minos.RetryingDecisionClient.RetryingDecisionClient(Minos.IDecisionClient! inner
 override Minos.RetryingDecisionClient.EvaluateAsync(Minos.DecisionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.DecisionResponse!, Minos.DecisionError!>>
 Minos.RetryingDecisionClientBuilderExtensions
 static Minos.RetryingDecisionClientBuilderExtensions.UseRetries(this Minos.DecisionClientBuilder! builder, System.Action<Minos.DecisionRetryOptions!>? configure = null) -> Minos.DecisionClientBuilder!
+Minos.LoggingDecisionClient
+Minos.LoggingDecisionClient.LoggingDecisionClient(Minos.IDecisionClient! innerClient, Microsoft.Extensions.Logging.ILogger! logger) -> void
+override Minos.LoggingDecisionClient.EvaluateAsync(Minos.DecisionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.DecisionResponse!, Minos.DecisionError!>>
+Minos.LoggingDecisionClientBuilderExtensions
+static Minos.LoggingDecisionClientBuilderExtensions.UseLogging(this Minos.DecisionClientBuilder! builder, Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory = null) -> Minos.DecisionClientBuilder!

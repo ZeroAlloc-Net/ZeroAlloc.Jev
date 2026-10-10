@@ -625,7 +625,8 @@ public sealed class DecisionClient : IDecisionClient
             var durationMs = DecisionLog.ElapsedMilliseconds(started);
             if (result.IsSuccess)
             {
-                DecisionLog.EvaluationSucceeded(logger, operation, model, _provider, questionCount, durationMs);
+                var providerName = ProviderName(_provider);
+                DecisionLog.EvaluationSucceeded(logger, operation, model, providerName, questionCount, durationMs);
             }
             else
             {
@@ -641,6 +642,9 @@ public sealed class DecisionClient : IDecisionClient
             throw;
         }
     }
+
+    private static string ProviderName(DecisionProvider provider)
+        => provider == DecisionProvider.OpenRouter ? nameof(DecisionProvider.OpenRouter) : nameof(DecisionProvider.TypeSafe);
 
     private ValueTask<Result<ModelList, DecisionError>> WithModelLogging(
         ValueTask<Result<ModelList, DecisionError>> call, long started, CancellationToken ct)

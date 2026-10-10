@@ -12,7 +12,7 @@ public sealed class DecisionLogTests
     {
         var logger = new FakeLogger();
 
-        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "m", DecisionProvider.TypeSafe, 1, 2.5);
+        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "m", "TypeSafe", 1, 2.5);
         DecisionLog.EvaluationFailed(logger, DecisionLog.Evaluate, "m", DecisionErrorKind.Server, 500, 2.5, "The API returned HTTP 500.");
         DecisionLog.AttemptRetrying(logger, 1, DecisionErrorKind.Server, 500, null);
         DecisionLog.ModelsListed(logger, DecisionProvider.TypeSafe, 2, 2.5);
@@ -37,7 +37,7 @@ public sealed class DecisionLogTests
     {
         var logger = new FakeLogger();
 
-        DecisionLog.EvaluationSucceeded(logger, DecisionLog.EvaluateBuiltSet, "jev-latest", DecisionProvider.OpenRouter, 4, 2.5);
+        DecisionLog.EvaluationSucceeded(logger, DecisionLog.EvaluateBuiltSet, "jev-latest", "OpenRouter", 4, 2.5);
         var succeeded = logger.LatestRecord;
         Assert.Equal("evaluate-built-set", LogAssert.Field(succeeded, "Operation"));
         Assert.Equal("jev-latest", LogAssert.Field(succeeded, "Model"));
@@ -67,7 +67,7 @@ public sealed class DecisionLogTests
     {
         var logger = new FakeLogger();
 
-        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "jev-latest", DecisionProvider.TypeSafe, 3, 2.5);
+        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "jev-latest", "TypeSafe", 3, 2.5);
 
         var record = logger.LatestRecord;
         Assert.Equal("evaluate", LogAssert.Field(record, "Operation"));
