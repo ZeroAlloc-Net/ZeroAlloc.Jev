@@ -86,9 +86,10 @@ public sealed class LoggingDecisionApiTests
 
         await api.EvaluateAsync(null!, "Bearer k", retryCount: null, CancellationToken.None);
         await api.EvaluateRawAsync(null!, "Bearer k", retryCount: null, CancellationToken.None);
+        await api.SendAsync(null!, "v1/systemone", "Bearer k", retryCount: null, CancellationToken.None);
         await api.ListModelsAsync("Bearer k", retryCount: null, CancellationToken.None);
 
-        Assert.Equal(3, logger.Collector.Count);
+        Assert.Equal(4, logger.Collector.Count);
     }
 
     [Fact]
@@ -150,6 +151,9 @@ public sealed class LoggingDecisionApiTests
         public ValueTask<Result<RawJson, DecisionError>> EvaluateRawAsync(RawJson body, string authorization, int? retryCount, CancellationToken ct)
             => new(Result<RawJson, DecisionError>.Failure(error ?? Overloaded));
 
+        public ValueTask<Result<RawJson, DecisionError>> SendAsync(RawJson body, string path, string authorization, int? retryCount, CancellationToken ct)
+            => new(Result<RawJson, DecisionError>.Failure(error ?? Overloaded));
+
         public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(string authorization, int? retryCount, CancellationToken ct)
             => new(error is null
                 ? Result<ModelList, DecisionError>.Success(new ModelList { Models = [] })
@@ -164,6 +168,9 @@ public sealed class LoggingDecisionApiTests
             => throw new NotSupportedException();
 
         public ValueTask<Result<RawJson, DecisionError>> EvaluateRawAsync(RawJson body, string authorization, int? retryCount, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<Result<RawJson, DecisionError>> SendAsync(RawJson body, string path, string authorization, int? retryCount, CancellationToken ct)
             => throw new NotSupportedException();
 
         public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(string authorization, int? retryCount, CancellationToken ct)

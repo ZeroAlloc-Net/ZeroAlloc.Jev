@@ -34,8 +34,8 @@ internal static class DependencyInjectionChecks
             .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
         using var provider = services.BuildServiceProvider();
 
-        var client = provider.GetRequiredService<IDecisionClient>();
-        var keyed = provider.GetRequiredKeyedService<IDecisionClient>("openrouter");
+        var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
+        var keyed = provider.GetRequiredKeyedService<IDecisionClient>("openrouter").GetService<DecisionClient>()!;
         var result = await client.EvaluateAsync(Program.Request()).ConfigureAwait(false);
         var keyedResult = await keyed.EvaluateAsync(Program.Request()).ConfigureAwait(false);
 
@@ -97,8 +97,8 @@ internal static class DependencyInjectionChecks
             keyed is { Provider: DecisionProvider.OpenRouter, ApiKey: "smoke-openrouter-key", Model: "jev-1.13.0" },
             "AddDecisionClient binds a keyed client's own section under Native AOT");
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Program.Request()).ConfigureAwait(false);
-        var keyedResult = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter")
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Program.Request()).ConfigureAwait(false);
+        var keyedResult = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter").GetService<DecisionClient>()!
             .EvaluateAsync(Program.Request()).ConfigureAwait(false);
         Program.Check(
             result.IsSuccess && keyedResult.IsSuccess,
@@ -116,8 +116,8 @@ internal static class DependencyInjectionChecks
             services.AddDecisionClient("secondary").ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
             using var provider = services.BuildServiceProvider();
 
-            var client = provider.GetRequiredService<IDecisionClient>();
-            var keyed = provider.GetRequiredKeyedService<IDecisionClient>("secondary");
+            var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
+            var keyed = provider.GetRequiredKeyedService<IDecisionClient>("secondary").GetService<DecisionClient>()!;
             var result = await client.EvaluateAsync(Program.Request()).ConfigureAwait(false);
             var keyedResult = await keyed.EvaluateAsync(Program.Request()).ConfigureAwait(false);
 

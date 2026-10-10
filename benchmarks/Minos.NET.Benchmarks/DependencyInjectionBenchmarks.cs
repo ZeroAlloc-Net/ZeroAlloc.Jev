@@ -14,7 +14,7 @@ namespace Minos.Benchmarks;
 public class DependencyInjectionBenchmarks : IDisposable
 {
     private ServiceProvider _provider = null!;
-    private IDecisionClient _resolvedClient = null!;
+    private DecisionClient _resolvedClient = null!;
     private HttpClient _handBuiltHttp = null!;
     private DecisionClient _handBuiltClient = null!;
     private SystemOneRequest _request = null!;
@@ -31,7 +31,7 @@ public class DependencyInjectionBenchmarks : IDisposable
             })
             .ConfigurePrimaryHttpMessageHandler(() => new ClientBenchmarks.CannedHandler(HttpStatusCode.OK, ClientBenchmarks.NoulResponseJson));
         _provider = services.BuildServiceProvider();
-        _resolvedClient = _provider.GetRequiredService<IDecisionClient>();
+        _resolvedClient = _provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
 
         _handBuiltHttp = new HttpClient(new ClientBenchmarks.CannedHandler(HttpStatusCode.OK, ClientBenchmarks.NoulResponseJson));
         DecisionClient.ConfigureHttpClient(_handBuiltHttp, new DecisionClientOptions { BaseAddress = new Uri("https://example.test/api/") });

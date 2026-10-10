@@ -360,7 +360,7 @@ public sealed class QuestionSetsAtRunTimeTests
     }
 
     [Fact]
-    public async Task AFakeThatImplementsTheTwoAbstractMembers_EvaluatesABuiltSet()
+    public async Task AFakeClient_EvaluatesABuiltSet_ThroughTheExtension()
     {
         var set = QuestionSet.CreateBuilder().Noul("a", "A?", out var a).Build().Value;
 
@@ -381,16 +381,15 @@ public sealed class QuestionSetsAtRunTimeTests
 
     private sealed class FakeClient : IDecisionClient
     {
-        public ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request, CancellationToken cancellationToken)
-            => ValueTask.FromResult(Result<SystemOneResponse, DecisionError>.Success(new SystemOneResponse
-            {
-                Model = "fake",
-                Answers = new Dictionary<string, Answer> { ["a"] = new NoulAnswer { Noul = 0.4 } },
-                Usage = new DecisionUsage { InputTokens = 1, OutputTokens = 1 },
-            }));
+        public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(Result<DecisionResponse, DecisionError>.Success(
+                new DecisionResponse(request.Definition, [QuestionAnswer.Noul(0.4)], model: "fake")));
 
-        public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
     }
 
     private enum Empty

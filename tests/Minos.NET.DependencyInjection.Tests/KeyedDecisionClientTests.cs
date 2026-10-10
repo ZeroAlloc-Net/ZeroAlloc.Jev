@@ -38,8 +38,8 @@ public sealed class KeyedDecisionClientTests
             .ConfigurePrimaryHttpMessageHandler(() => keyedHandler);
         using var provider = services.BuildServiceProvider();
 
-        _ = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
-        _ = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter").EvaluateAsync(Request());
+        _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
+        _ = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter").GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         var defaultRequest = OnlyRequest(defaultHandler);
         Assert.Equal(new Uri("http://default.local/v1/systemone"), defaultRequest.Uri);
@@ -138,7 +138,7 @@ public sealed class KeyedDecisionClientTests
         services.AddDecisionClient("openrouter");
         using var provider = services.BuildServiceProvider();
 
-        _ = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter").EvaluateAsync(Request());
+        _ = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter").GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         var registrations = services.Where(descriptor => descriptor.ServiceType == typeof(IDecisionClient)).ToArray();
         Assert.True(registrations.Length == 1, $"Expected one IDecisionClient registration, found {registrations.Length}.");

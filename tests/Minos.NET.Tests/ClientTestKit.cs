@@ -1,5 +1,7 @@
-using System.Text.Json;
-using Minos.Serialization;
+using System.Buffers;
+using System.Text;
+using System.Text.Json.Nodes;
+using Minos.Protocols;
 using Minos.Transport;
 using ZeroAlloc.Results;
 
@@ -28,6 +30,13 @@ internal static class ClientTestKit
 #pragma warning restore HLQ005
     }
 
+    /// <summary>The body <see cref="DecisionClient"/> sends for <paramref name="request"/> with <see cref="TestModel"/>, as JSON.</summary>
+    public static JsonNode ExpectedBody(DecisionRequest request)
+    {
+        using var body = SystemOneProtocol.Instance.WriteRequest(request.Definition, request.State, TestModel, ArrayPool<byte>.Shared);
+        return JsonNode.Parse(Encoding.UTF8.GetString(body.Span))!;
+    }
+
     /// <summary>Creates a client over <paramref name="handler"/>; the caller disposes <paramref name="httpClients"/>.</summary>
     public static DecisionClient Client(
         List<HttpClient> httpClients, StubHandler handler, CountingPool? pool = null, DecisionProvider provider = DecisionProvider.TypeSafe)
@@ -41,29 +50,68 @@ internal static class ClientTestKit
     }
 
     /// <summary>
-    /// Implements only the abstract members, so typed and built-set calls run the default interface methods. Answers
-    /// with <paramref name="responseJson"/>, or the <c>response-noul.json</c> fixture.
+    /// A fake <see cref="IDecisionClient"/> that records each <see cref="DecisionRequest"/>. It answers with
+    /// <paramref name="failure"/> when given; otherwise with <paramref name="responseJson"/> read through the System One
+    /// protocol when given; otherwise with a canned response for <paramref name="answersFor"/>, or the request's own
+    /// definition: every Noul at 0.95, and every Choice and Score at index 0 with confidence 0.9 and probability 1.
     /// </summary>
-    public sealed class CapturingClient(string? responseJson = null) : IDecisionClient
+    public sealed class CapturingClient(QuestionSetDefinition? answersFor = null, DecisionError? failure = null, string? responseJson = null)
+        : IDecisionClient
     {
-        private readonly List<SystemOneRequest> _requests = [];
+        public List<DecisionRequest> Requests { get; } = [];
 
-        public SystemOneRequest OnlyRequest()
+        public CancellationToken LastToken { get; private set; }
+
+        public DecisionRequest OnlyRequest()
         {
             // HLQ005 fires on the method name alone: this is xUnit's Assert.Single(IEnumerable), not System.Linq.Enumerable.Single().
 #pragma warning disable HLQ005
-            return Assert.Single(_requests);
+            return Assert.Single(Requests);
 #pragma warning restore HLQ005
         }
 
-        public ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request, CancellationToken cancellationToken)
+        public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
         {
-            _requests.Add(request);
-            return ValueTask.FromResult(Result<SystemOneResponse, DecisionError>.Success(
-                JsonSerializer.Deserialize(responseJson ?? Fixture.Text("response-noul.json"), DecisionJsonContext.Default.SystemOneResponse)!));
+            Requests.Add(request);
+            LastToken = cancellationToken;
+            if (failure is not null)
+            {
+                return ValueTask.FromResult(Result<DecisionResponse, DecisionError>.Failure(failure));
+            }
+
+            var definition = answersFor ?? request.Definition;
+            return ValueTask.FromResult(responseJson is null
+                ? Result<DecisionResponse, DecisionError>.Success(Canned(definition))
+                : SystemOneProtocol.Instance.ReadResponse(Encoding.UTF8.GetBytes(responseJson), definition));
         }
 
-        public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        public object? GetService(Type serviceType, object? serviceKey = null)
+            => serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+
+        public void Dispose()
+        {
+        }
+
+        public static DecisionResponse Canned(QuestionSetDefinition definition)
+        {
+            var answers = new QuestionAnswer[definition.Questions.Count];
+            for (var i = 0; i < answers.Length; i++)
+            {
+                var question = definition.Questions[i];
+                if (question.Kind == QuestionKind.Noul)
+                {
+                    answers[i] = QuestionAnswer.Noul(0.95);
+                    continue;
+                }
+
+                var probabilities = new double[question.Options.Count];
+                probabilities[0] = 1;
+                answers[i] = question.Kind == QuestionKind.Choice
+                    ? QuestionAnswer.Choice(0, 0.9, probabilities)
+                    : QuestionAnswer.Score(0, 0, 0.9, probabilities);
+            }
+
+            return new DecisionResponse(definition, answers, "minos-fake");
+        }
     }
 }

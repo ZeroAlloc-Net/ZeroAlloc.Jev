@@ -26,7 +26,7 @@ public sealed class DependencyInjectionTimeoutTests : IClassFixture<WireMockFixt
         var attempts = new DependencyInjectionHarness.AttemptCount();
         using var provider = DependencyInjectionHarness.Provider(_fixture, attempts, timeout: TimeSpan.FromMilliseconds(300));
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Fixtures.NoulRequest());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Fixtures.NoulRequest());
 
         Assert.True(result.IsFailure);
         Assert.Equal(DecisionErrorKind.Timeout, result.Error.Kind);
@@ -42,7 +42,7 @@ public sealed class DependencyInjectionTimeoutTests : IClassFixture<WireMockFixt
         using var provider = DependencyInjectionHarness.BoundProvider(
             _fixture, attempts, maxRetries: 0, timeout: TimeSpan.FromMilliseconds(300));
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Fixtures.NoulRequest());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Fixtures.NoulRequest());
 
         Assert.True(result.IsFailure);
         Assert.Equal(DecisionErrorKind.Timeout, result.Error.Kind);

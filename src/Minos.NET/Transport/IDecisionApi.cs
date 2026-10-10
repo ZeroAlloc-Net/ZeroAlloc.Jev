@@ -38,6 +38,26 @@ internal interface IDecisionApi
         [Header("X-TypeSafe-Retry-Count")] [RetryAttempt] int? retryCount,
         CancellationToken ct);
 
+    /// <summary>
+    /// The protocol-neutral attempt: POSTs pre-written UTF-8 JSON to <paramref name="path"/>, relative to the base address,
+    /// and returns the raw response body. <c>DecisionTransport</c> sends one attempt through it, passing the protocol's
+    /// <see cref="Protocols.IDecisionProtocol.EndpointPath"/>. The caller owns both <see cref="RawJson"/> values.
+    /// </summary>
+    /// <remarks>
+    /// <c>{**path}</c> escapes each segment and keeps the <c>/</c> between them, so <c>v1/systemone</c> is sent as is.
+    /// The path must not start with <c>/</c>, which would make it root-relative and drop the base address's own path.
+    /// The transport passes the retry count itself, from <see cref="DecisionRequest.RetryAttempt"/>, so it carries no
+    /// <see cref="RetryAttemptAttribute"/>.
+    /// </remarks>
+    [Post("{**path}")]
+    [Serializer(typeof(DecisionRawSerializer))]
+    ValueTask<Result<RawJson, DecisionError>> SendAsync(
+        [Body] RawJson body,
+        string path,
+        [Header("Authorization")] string authorization,
+        [Header("X-TypeSafe-Retry-Count")] int? retryCount,
+        CancellationToken ct);
+
     [Get("v1/models")]
     ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(
         [Header("Authorization")] string authorization,

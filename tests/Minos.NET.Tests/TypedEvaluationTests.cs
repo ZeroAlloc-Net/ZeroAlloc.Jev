@@ -84,52 +84,6 @@ public sealed class TypedEvaluationTests
     }
 
     [Fact]
-    public void ParseAnswersObject_ParsesAnAnswersObject()
-    {
-        var result = TypedEvaluation.ParseAnswersObject<UrgencyCheck>("""{"is_urgent":{"type":"noul","noul":0.7}}"""u8);
-
-        Assert.Equal(0.7, result.Value.IsUrgent.Probability);
-    }
-
-    [Fact]
-    public void ParseAnswersObject_WithLeadingUtf8Bom_IsParsed()
-    {
-        var withBom = new byte[] { 0xEF, 0xBB, 0xBF }
-            .Concat(Encoding.UTF8.GetBytes("""{"is_urgent":{"type":"noul","noul":0.7}}"""))
-            .ToArray();
-
-        var result = TypedEvaluation.ParseAnswersObject<UrgencyCheck>(withBom);
-
-        Assert.True(result.IsSuccess);
-        Assert.Equal(0.7, result.Value.IsUrgent.Probability);
-    }
-
-    [Fact]
-    public void ParseAnswersObject_Rejected_IsInvalidResponse()
-    {
-        var result = TypedEvaluation.ParseAnswersObject<UrgencyCheck>("{}"u8, statusCode: 200);
-
-        Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
-        Assert.Equal(200, result.Error.StatusCode);
-        Assert.IsType<JsonException>(result.Error.Exception);
-    }
-
-    [Fact]
-    public void FromResponse_ParsesConsecutiveResponses()
-    {
-        var noul = JsonSerializer.Deserialize(Fixture.Text("response-noul.json"), Serialization.DecisionJsonContext.Default.SystemOneResponse)!;
-        var choice = JsonSerializer.Deserialize(Fixture.Text("response-choice.json"), Serialization.DecisionJsonContext.Default.SystemOneResponse)!;
-
-        var first = TypedEvaluation.FromResponse<UrgencyCheck>(noul);
-        var second = TypedEvaluation.FromResponse<DepartmentRouting>(choice);
-        var third = TypedEvaluation.FromResponse<UrgencyCheck>(noul);
-
-        Assert.Equal(0.95, first.Value.IsUrgent.Probability);
-        Assert.Equal(Department.Billing, second.Value.Department.Value);
-        Assert.Equal(first.Value, third.Value);
-    }
-
-    [Fact]
     public void ParseResponse_WithAParser_RunsIt()
     {
         var result = TypedEvaluation.ParseResponse(

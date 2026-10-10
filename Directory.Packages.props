@@ -24,9 +24,9 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <!-- HTTP client -->
     <PackageVersion Include="ZeroAlloc.Resilience" Version="3.3.1" />
-    <PackageVersion Include="ZeroAlloc.Rest" Version="3.2.1" />
-    <PackageVersion Include="ZeroAlloc.Rest.SystemTextJson" Version="3.2.1" />
-    <PackageVersion Include="ZeroAlloc.Results" Version="1.2.4" />
+    <PackageVersion Include="ZeroAlloc.Rest" Version="3.3.0" />
+    <PackageVersion Include="ZeroAlloc.Rest.SystemTextJson" Version="3.3.0" />
+    <PackageVersion Include="ZeroAlloc.Results" Version="1.3.0" />
     <!-- Telemetry: the attributes at run time, and the proxy generator bundled at analyzers/dotnet/cs. 1.11.0 is the floor: it sets error.type on the exception path and can leave the exception message out of the span status, #184. -->
     <PackageVersion Include="ZeroAlloc.Telemetry" Version="1.11.0" />
     <!--

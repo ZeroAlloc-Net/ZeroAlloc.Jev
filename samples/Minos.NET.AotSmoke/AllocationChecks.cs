@@ -523,7 +523,7 @@ internal static class AllocationChecks
         var services = new ServiceCollection();
         DependencyInjectionChecks.RegisterDefaultClient(services);
         using var provider = services.BuildServiceProvider();
-        var resolved = provider.GetRequiredService<IDecisionClient>();
+        var resolved = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
 
         // The same canned body as RegisterDefaultClient's handler, so both sides of the comparison parse one response.
         using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
@@ -558,7 +558,7 @@ internal static class AllocationChecks
         var services = new ServiceCollection();
         DependencyInjectionChecks.RegisterBoundDefaultClient(services);
         using var provider = services.BuildServiceProvider();
-        var resolved = provider.GetRequiredService<IDecisionClient>();
+        var resolved = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
 
         // The bound section's base address and key, and the same canned body, so both sides make the same call.
         using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));

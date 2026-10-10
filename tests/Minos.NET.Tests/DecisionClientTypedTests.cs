@@ -410,7 +410,7 @@ public sealed class DecisionClientTypedTests : IDisposable
     }
 
     [Fact]
-    public async Task TheDefaultPath_RejectsANumericTypedStateToo()
+    public async Task TheExtension_RejectsANumericTypedStateToo()
     {
         IDecisionClient fake = new CapturingClient();
 
@@ -424,11 +424,12 @@ public sealed class DecisionClientTypedTests : IDisposable
         string? respondWith = "response-noul.json")
         where T : IQuestionSet<T>
     {
-        var fake = new CapturingClient();
+        var fake = new CapturingClient(responseJson: respondWith is null ? "{}" : Fixture.Text(respondWith));
         var expectedResult = await viaDefaultPath(fake);
-        var expected = JsonNode.Parse(JsonSerializer.Serialize(fake.OnlyRequest(), DecisionJsonContext.Default.SystemOneRequest))!;
-        Assert.Equal(DecisionDefaults.Model, expected["model"]!.GetValue<string>());
-        expected["model"] = TestModel;
+        var captured = fake.OnlyRequest();
+        Assert.Same(T.Definition, captured.Definition);
+        Assert.Null(captured.Model);
+        var expected = ExpectedBody(captured);
 
         var handler = StubHandler.Json(HttpStatusCode.OK, respondWith is null ? "{}" : Fixture.Text(respondWith));
         var pool = new CountingPool();

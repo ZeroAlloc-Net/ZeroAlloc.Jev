@@ -300,7 +300,8 @@ public sealed class DecisionClientTests : IDisposable
     {
         using var client = Borrowing(StubHandler.Json(HttpStatusCode.OK, "{}"));
 
-        await Assert.ThrowsAsync<ArgumentNullException>(async () => await client.EvaluateAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await client.EvaluateAsync((SystemOneRequest)null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(async () => await client.EvaluateAsync((DecisionRequest)null!));
     }
 
     [Fact]
@@ -339,18 +340,19 @@ public sealed class DecisionClientTests : IDisposable
         => new(Settings(timeout: timeout), httpClient: null, handler, TimeProvider.System);
 
     [Theory]
-    [InlineData(typeof(IDecisionClient))]
-    [InlineData(typeof(DecisionClient))]
-    public void EveryCancellationTokenParameter_IsNamedCancellationToken(Type type)
+    [InlineData(typeof(IDecisionClient), 1)]
+    [InlineData(typeof(DecisionClient), 8)]
+    [InlineData(typeof(DecisionClientExtensions), 5)]
+    public void EveryCancellationTokenParameter_IsNamedCancellationToken(Type type, int count)
     {
         // A parameter name is public API: callers can pass the token by name, as the BCL names it.
-        var names = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+        var names = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
             .SelectMany(method => method.GetParameters())
             .Where(parameter => parameter.ParameterType == typeof(CancellationToken))
             .Select(parameter => parameter.Name)
             .ToArray();
 
-        Assert.Equal(7, names.Length);
+        Assert.Equal(count, names.Length);
         Assert.All(names, name => Assert.Equal("cancellationToken", name));
     }
 

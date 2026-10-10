@@ -23,7 +23,7 @@ namespace Minos;
 /// Spans and metrics come from the Minos ActivitySource and Meter; see the
 /// <see href="https://marcelroozekrans.github.io/Minos.NET/observability">observability guide</see>.
 /// </remarks>
-public sealed class DecisionClient : IDecisionClient, IDisposable
+public sealed class DecisionClient : IDecisionClient
 {
     private static readonly ProductInfoHeaderValue UserAgent = CreateUserAgent();
 
@@ -35,6 +35,8 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
     private readonly ArrayPool<byte> _pool;
     private readonly DecisionProvider _provider;
     private readonly ILogger? _logger;
+    private readonly DecisionClientMetadata _metadata;
+    private readonly DecisionTransport _transport;
     // Volatile: Dispose writes it before it disposes the owned HttpClient, and the error mapper and the disposal guard
     // read it on the threads that complete the calls in flight.
     private volatile bool _disposed;
@@ -199,6 +201,8 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
             new SystemTextJsonSerializer(DecisionJsonContext.Default),
             new DecisionRawSerializer(pool),
             new DecisionErrorMapper(time, _ownedHttpClient is null ? null : disposed, SystemOneProtocol.Instance));
+        _metadata = new DecisionClientMetadata(_providerName, _endpoint, _model);
+        _transport = new DecisionTransport(transport, SystemOneProtocol.Instance, "Bearer " + settings.ApiKey, _metadata, pool, disposed);
         var retry = RetryPolicyFor(settings);
 
         // The retry proxy, then the disposal guard, then the logging decorator when there is a logger, then the transport.
@@ -238,11 +242,66 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
         ApplyHttpSettings(httpClient, DecisionClientSettings.ResolveHttp(options, environment));
     }
 
+    /// <summary>Asks the request's questions about its state.</summary>
+    /// <param name="request">The questions, the state and, optionally, the model.</param>
+    /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
+    /// <remarks>Calls <see cref="EvaluateAsync(DecisionRequest, CancellationToken)"/> without cancellation.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
+    public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request)
+        => EvaluateAsync(request, CancellationToken.None);
+
+    /// <summary>Asks the request's questions about its state.</summary>
+    /// <param name="request">The questions, the state and, optionally, the model.</param>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
+    /// <remarks>
+    /// Sends one attempt through the client's transport, with <see cref="DecisionClientOptions.Model"/> when
+    /// <see cref="DecisionRequest.Model"/> is <see langword="null"/>, and returns every pooled buffer before it completes.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
+    public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _transport.EvaluateAsync(request, cancellationToken);
+    }
+
+    // Explicit, so the public pair above follows the (x)/(x, CancellationToken) convention: implementing the interface's
+    // optional parameter implicitly would either drop its default or give this class an overload with an optional one.
+    ValueTask<Result<DecisionResponse, DecisionError>> IDecisionClient.EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken)
+        => EvaluateAsync(request, cancellationToken);
+
     /// <inheritdoc />
+    /// <remarks>Returns this client for a type it is, then its <see cref="DecisionClientMetadata"/>; <see langword="null"/> for a non-null <paramref name="serviceKey"/>.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="serviceType"/> is <see langword="null"/>.</exception>
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(serviceType);
+        if (serviceKey is not null)
+        {
+            return null;
+        }
+
+        return serviceType.IsInstanceOfType(this) ? this : _transport.GetService(serviceType);
+    }
+
+    /// <summary>Asks Jev the request's questions about its state.</summary>
+    /// <param name="request">The state, the questions and the model.</param>
+    /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
+    /// <remarks>Calls <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> without cancellation.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request)
         => EvaluateAsync(request, CancellationToken.None);
 
-    /// <inheritdoc />
+    /// <summary>Asks Jev the request's questions about its state.</summary>
+    /// <param name="request">The state, the questions and the model.</param>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -257,19 +316,33 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
             cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>Asks <typeparamref name="T"/>'s questions about a text state and returns its typed answers.</summary>
+    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
+    /// <param name="state">The text to evaluate.</param>
+    /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
     /// <remarks>Calls <see cref="EvaluateAsync{T}(string, CancellationToken)"/> without cancellation.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="state"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(string state)
         where T : IQuestionSet<T>
         => EvaluateAsync<T>(state, CancellationToken.None);
 
-    /// <inheritdoc />
+    /// <summary>Asks <typeparamref name="T"/>'s questions about a text state and returns its typed answers.</summary>
+    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
+    /// <param name="state">The text to evaluate.</param>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>
+    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
+    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
+    /// </returns>
     /// <remarks>
     /// Writes the request straight from <typeparamref name="T"/>'s questions, with <see cref="DecisionClientOptions.Model"/>,
     /// and reads the typed answers straight from the response body, in pooled buffers, without building a
     /// <see cref="SystemOneRequest"/> or <see cref="SystemOneResponse"/>. Retries and errors work as for
     /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/>.
     /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="state"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(string state, CancellationToken cancellationToken)
         where T : IQuestionSet<T>
     {
@@ -279,19 +352,33 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
         return EvaluateGeneratedAsync<T>(started, SystemOneProtocol.Instance.WriteRequest(T.Definition, state, _model, _pool), cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>Asks <typeparamref name="T"/>'s questions about a JSON state and returns its typed answers.</summary>
+    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
+    /// <param name="state">The state: a JSON string is sent as text; an object or array as structured content.</param>
+    /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
     /// <remarks>Calls <see cref="EvaluateAsync{T}(JsonElement, CancellationToken)"/> without cancellation.</remarks>
+    /// <exception cref="ArgumentException"><paramref name="state"/> is not a string, object or array.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(JsonElement state)
         where T : IQuestionSet<T>
         => EvaluateAsync<T>(state, CancellationToken.None);
 
-    /// <inheritdoc />
+    /// <summary>Asks <typeparamref name="T"/>'s questions about a JSON state and returns its typed answers.</summary>
+    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
+    /// <param name="state">The state: a JSON string is sent as text; an object or array, such as records or a chat log, as structured content.</param>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>
+    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
+    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
+    /// </returns>
     /// <remarks>
     /// Writes the request straight from <typeparamref name="T"/>'s questions, with <see cref="DecisionClientOptions.Model"/>,
     /// and reads the typed answers straight from the response body, in pooled buffers, without building a
     /// <see cref="SystemOneRequest"/> or <see cref="SystemOneResponse"/>. Retries and errors work as for
     /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/>.
     /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="state"/> is not a string, object or array.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(JsonElement state, CancellationToken cancellationToken)
         where T : IQuestionSet<T>
     {
@@ -301,13 +388,27 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
         return EvaluateGeneratedAsync<T>(started, SystemOneProtocol.Instance.WriteRequest(T.Definition, state, _model, _pool), cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>Asks <typeparamref name="T"/>'s questions about a UTF-8 JSON state and returns its typed answers.</summary>
+    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
+    /// <param name="utf8JsonState">
+    /// The state as one UTF-8 JSON value: a string is sent as text; an object or array as structured content. It is
+    /// not referenced after the call returns.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>
+    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
+    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
+    /// </returns>
     /// <remarks>
     /// Writes the request straight from <typeparamref name="T"/>'s questions, with <see cref="DecisionClientOptions.Model"/>,
     /// and reads the typed answers straight from the response body, in pooled buffers, without building a
     /// <see cref="SystemOneRequest"/> or <see cref="SystemOneResponse"/>. Retries and errors work as for
     /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/>.
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="utf8JsonState"/> is not exactly one well-formed JSON string, object or array.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<T, DecisionError>> EvaluateUtf8Async<T>(ReadOnlyMemory<byte> utf8JsonState, CancellationToken cancellationToken = default)
         where T : IQuestionSet<T>
     {
@@ -317,21 +418,49 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
         return EvaluateGeneratedAsync<T>(started, SystemOneProtocol.Instance.WriteUtf8Request(T.Definition, utf8JsonState.Span, _model, _pool), cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Asks <typeparamref name="T"/>'s questions about a typed state, the one its
+    /// <c>[Questions(State = typeof(TState))]</c> names, and returns its typed answers.
+    /// </summary>
+    /// <typeparam name="T">A <c>[Questions]</c> question set linked to <typeparamref name="TState"/>.</typeparam>
+    /// <typeparam name="TState">The state type.</typeparam>
+    /// <param name="state">The state; it must serialize to a JSON string, object or array.</param>
+    /// <param name="stateTypeInfo">The source-generated metadata <paramref name="state"/> is serialized with.</param>
+    /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
     /// <remarks>
     /// Calls <see cref="EvaluateAsync{T, TState}(TState, JsonTypeInfo{TState}, CancellationToken)"/> without cancellation.
     /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="state"/> or <paramref name="stateTypeInfo"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="state"/> does not serialize to a string, object or array.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<T, DecisionError>> EvaluateAsync<T, TState>(TState state, JsonTypeInfo<TState> stateTypeInfo)
         where T : IQuestionSet<T, TState>
         => EvaluateAsync<T, TState>(state, stateTypeInfo, CancellationToken.None);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Asks <typeparamref name="T"/>'s questions about a typed state, the one its
+    /// <c>[Questions(State = typeof(TState))]</c> names, and returns its typed answers.
+    /// </summary>
+    /// <typeparam name="T">A <c>[Questions]</c> question set linked to <typeparamref name="TState"/>.</typeparam>
+    /// <typeparam name="TState">The state type.</typeparam>
+    /// <param name="state">The state; it must serialize to a JSON string, object or array.</param>
+    /// <param name="stateTypeInfo">
+    /// The source-generated metadata <paramref name="state"/> is serialized with, from your <c>JsonSerializerContext</c>.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>
+    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
+    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
+    /// </returns>
     /// <remarks>
     /// Writes the request straight from <typeparamref name="T"/>'s questions, with <see cref="DecisionClientOptions.Model"/>,
     /// and reads the typed answers straight from the response body, in pooled buffers, without building a
     /// <see cref="SystemOneRequest"/> or <see cref="SystemOneResponse"/>. Retries and errors work as for
     /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/>.
     /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="state"/> or <paramref name="stateTypeInfo"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="state"/> does not serialize to a string, object or array.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<T, DecisionError>> EvaluateAsync<T, TState>(TState state, JsonTypeInfo<TState> stateTypeInfo, CancellationToken cancellationToken)
         where T : IQuestionSet<T, TState>
     {
@@ -346,18 +475,34 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
         return EvaluateGeneratedAsync<T>(started, SystemOneProtocol.Instance.WriteRequest(T.Definition, state, stateTypeInfo, _model, _pool), cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>Asks a built question set's questions about a state and returns its answers.</summary>
+    /// <param name="questionSet">The set, from <see cref="QuestionSetBuilder.Build"/>.</param>
+    /// <param name="state">The state: text, or a JSON object or array.</param>
+    /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
     /// <remarks>Calls <see cref="EvaluateAsync(QuestionSet, DecisionContent, CancellationToken)"/> without cancellation.</remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="questionSet"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="state"/> is uninitialized.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<Answers, DecisionError>> EvaluateAsync(QuestionSet questionSet, DecisionContent state)
         => EvaluateAsync(questionSet, state, CancellationToken.None);
 
-    /// <inheritdoc />
+    /// <summary>Asks a built question set's questions about a state and returns its answers.</summary>
+    /// <param name="questionSet">The set, from <see cref="QuestionSetBuilder.Build"/>.</param>
+    /// <param name="state">The state: text, or a JSON object or array.</param>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>
+    /// The answers, or the <see cref="DecisionError"/> that prevented them; answers the set rejects give
+    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
+    /// </returns>
     /// <remarks>
     /// Writes the request straight from the set's <see cref="QuestionSet.Definition"/>, with
     /// <see cref="DecisionClientOptions.Model"/>, and reads the answers straight from the response body, in pooled buffers,
     /// without building a <see cref="SystemOneRequest"/> or <see cref="SystemOneResponse"/>. Retries and errors work as
     /// for <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/>.
     /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="questionSet"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="state"/> is uninitialized.</exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<Answers, DecisionError>> EvaluateAsync(QuestionSet questionSet, DecisionContent state, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(questionSet);
@@ -374,7 +519,10 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
             cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>Lists the models and aliases available to the account. TypeSafe's API only.</summary>
+    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
+    /// <returns>The models, or the <see cref="DecisionError"/> that prevented them; <see cref="DecisionErrorKind.Unsupported"/> on OpenRouter.</returns>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

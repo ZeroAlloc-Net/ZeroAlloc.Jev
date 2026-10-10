@@ -32,7 +32,8 @@ internal static class Program
         await StructuredQuestionSetRoundTrips().ConfigureAwait(false);
         await TypedEvaluateAsyncParsesAnswers().ConfigureAwait(false);
         await TypedEvaluateAsyncWithTStateParsesAnswers().ConfigureAwait(false);
-        await DefaultInterfaceMethodFallbackParsesAnswers().ConfigureAwait(false);
+        await HandBuiltResponseFeedsTheTypedExtension().ConfigureAwait(false);
+        SystemOneResponseModelConstructs();
         await BuiltQuestionSetEvaluates().ConfigureAwait(false);
         await BuiltEnumChoiceReadsTheFieldsInDeclarationOrder().ConfigureAwait(false);
         await LoggingChecks.RetriedEvaluationLogsTheRetryAndTheSuccess().ConfigureAwait(false);
@@ -56,11 +57,10 @@ internal static class Program
         await DecisionClientChecks.TypedJsonStateEvaluates().ConfigureAwait(false);
         await DecisionClientChecks.TypedUtf8StateEvaluates().ConfigureAwait(false);
         await DecisionClientChecks.TypedStateEvaluatesWithACancellationToken().ConfigureAwait(false);
-        await IDecisionClientChecks.AbstractMembersRunThroughTheInterface().ConfigureAwait(false);
-        await IDecisionClientChecks.RequestDefaultMethodPassesTheRequestOn().ConfigureAwait(false);
-        await IDecisionClientChecks.TypedDefaultMethodsSendTheStateAndParseAnswers().ConfigureAwait(false);
-        await IDecisionClientChecks.TypedStateDefaultMethodsSendTheStateAndParseAnswers().ConfigureAwait(false);
-        await IDecisionClientChecks.BuiltSetDefaultMethodsSendTheStateAndReadAnswers().ConfigureAwait(false);
+        await IDecisionClientChecks.NeutralCallAndServicesRunThroughTheInterface().ConfigureAwait(false);
+        await IDecisionClientChecks.TypedExtensionsSendTheStateAndCreateAnswers().ConfigureAwait(false);
+        await IDecisionClientChecks.TypedStateExtensionsSendTheStateAndCreateAnswers().ConfigureAwait(false);
+        await IDecisionClientChecks.BuiltSetExtensionsSendTheStateAndReadAnswers().ConfigureAwait(false);
         DecisionClientOptionsChecks.ValidateAcceptsValidOptionsAndRejectsInvalidOnes();
         DecisionContentChecks.TextContentRoundTrips();
         DecisionContentChecks.JsonContentRoundTrips();
@@ -253,20 +253,39 @@ internal static class Program
             "EvaluateAsync<T, TState>(state, stateTypeInfo) parses typed answers over the raw, pooled-buffer path");
     }
 
-    [Covers("Minos.IDecisionClient.EvaluateAsync<T>(string! state) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>")]
+    [Covers("Minos.DecisionResponse.DecisionResponse(Minos.QuestionSetDefinition! definition, System.Collections.Generic.IReadOnlyList<Minos.QuestionAnswer>! answers, string? model = null, Minos.DecisionUsage? usage = null) -> void")]
+    [Covers("static Minos.QuestionAnswer.Noul(double value) -> Minos.QuestionAnswer")]
+    [Covers("static Minos.QuestionAnswer.Choice(int chosenIndex, double confidence, double[]! probabilities) -> Minos.QuestionAnswer")]
+    [Covers("static Minos.QuestionAnswer.Score(int level, double value, double confidence, double[]! probabilities) -> Minos.QuestionAnswer")]
+    [Covers("Minos.DecisionUsage.DecisionUsage() -> void")]
+    private static async Task HandBuiltResponseFeedsTheTypedExtension()
+    {
+        // A fake's response, built with the public constructor and the QuestionAnswer factories, read by the generated
+        // SmokeTriage.Create through the typed extension, as a test fake would be, under Native AOT.
+        var response = new DecisionResponse(
+            SmokeTriage.Definition,
+            [QuestionAnswer.Noul(0.1), QuestionAnswer.Choice(1, 0.7, [0.2, 0.8]), QuestionAnswer.Score(2, 1.9, 0.8, [0.0, 0.1, 0.9])],
+            "minos-smoke",
+            new DecisionUsage { InputTokens = 296, OutputTokens = 20 });
+        using var client = new ExtensionFallbackClient(response);
+
+        var result = await client.EvaluateAsync<SmokeTriage>(SmokeAnswers.State).ConfigureAwait(false);
+
+        Check(
+            SmokeAnswers.IsTriage(result) && result.Value.Team.Confidence == 0.7 && result.Value.Urgency.Value == Urgency.High,
+            "a hand-built DecisionResponse creates typed answers through the typed extension under Native AOT");
+    }
+
     [Covers("Minos.SystemOneResponse.SystemOneResponse() -> void")]
     [Covers("Minos.NoulAnswer.NoulAnswer() -> void")]
     [Covers("Minos.ChoiceAnswer.ChoiceAnswer() -> void")]
     [Covers("Minos.ScoreAnswer.ScoreAnswer() -> void")]
-    [Covers("Minos.DecisionUsage.DecisionUsage() -> void")]
-    private static async Task DefaultInterfaceMethodFallbackParsesAnswers()
+    private static void SystemOneResponseModelConstructs()
     {
-        // DimFallbackClient implements only IDecisionClient's two abstract members, so this call runs the interface's
-        // default implementation, not DecisionClient's raw, pooled-buffer override, proving the compatible, allocating
-        // fallback path also compiles and runs under Native AOT.
-        IDecisionClient client = new DimFallbackClient(new SystemOneResponse
+        // The raw System One response model, as a caller of DecisionClient's raw EvaluateAsync builds one in a test.
+        var response = new SystemOneResponse
         {
-            Model = "jev-1.13.0",
+            Model = "minos-smoke",
             Answers = new Dictionary<string, Answer>(StringComparer.Ordinal)
             {
                 ["requests_credentials"] = new NoulAnswer { Noul = 0.1 },
@@ -285,16 +304,13 @@ internal static class Program
                 },
             },
             Usage = new DecisionUsage { InputTokens = 296, OutputTokens = 20 },
-        });
-
-        var result = await client.EvaluateAsync<SmokeTriage>(SmokeAnswers.State).ConfigureAwait(false);
+        };
 
         Check(
-            result.IsSuccess
-                && !result.Value.RequestsCredentials.Value
-                && result.Value.Team.Value == Team.Account
-                && result.Value.Urgency.Value == Urgency.High,
-            "the default interface method fallback parses typed answers under Native AOT");
+            response.Answers["requests_credentials"] is NoulAnswer { Noul: 0.1 }
+                && response.Answers["team"] is ChoiceAnswer { Choice: "account" }
+                && response.Answers["urgency"] is ScoreAnswer { Score: 1.9 },
+            "the raw System One response model constructs under Native AOT");
     }
 
     [Covers("static Minos.QuestionSet.CreateBuilder() -> Minos.QuestionSetBuilder!")]

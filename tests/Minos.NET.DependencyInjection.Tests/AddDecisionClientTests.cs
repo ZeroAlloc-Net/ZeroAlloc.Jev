@@ -56,7 +56,7 @@ public sealed class AddDecisionClientTests
         services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.True(result.IsSuccess);
         var records = provider.GetFakeLogCollector().GetSnapshot();
@@ -75,7 +75,7 @@ public sealed class AddDecisionClientTests
         services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler).AddDefaultLogger();
         using var provider = services.BuildServiceProvider();
 
-        _ = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.Contains(
             provider.GetFakeLogCollector().GetSnapshot(),
@@ -90,7 +90,7 @@ public sealed class AddDecisionClientTests
         services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.True(result.IsSuccess);
 
@@ -110,7 +110,7 @@ public sealed class AddDecisionClientTests
             .AddHttpMessageHandler(() => new RecordingHandler(seen));
         using var provider = services.BuildServiceProvider();
 
-        _ = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.Equal([new Uri("http://default.local/v1/systemone")], seen);
     }
@@ -125,7 +125,7 @@ public sealed class AddDecisionClientTests
         services.AddDecisionClient();
         using var provider = services.BuildServiceProvider();
 
-        _ = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         var registrations = services.Where(descriptor => descriptor.ServiceType == typeof(IDecisionClient)).ToArray();
         Assert.True(registrations.Length == 1, $"Expected one IDecisionClient registration, found {registrations.Length}.");
@@ -156,7 +156,7 @@ public sealed class AddDecisionClientTests
         var services = new ServiceCollection();
         services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<IDecisionClient>();
+        var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
         _ = await client.EvaluateAsync(Request());
 
         // The spec's claim: the singleton borrows its HttpClient, so disposing the client leaves the handler alone.
@@ -176,7 +176,7 @@ public sealed class AddDecisionClientTests
         var services = new ServiceCollection();
         services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => Noul());
         var provider = services.BuildServiceProvider();
-        var client = provider.GetRequiredService<IDecisionClient>();
+        var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
         _ = await client.EvaluateAsync(Request());
 
         provider.Dispose();

@@ -45,6 +45,9 @@ internal sealed class DisposalGuardDecisionApi(IDecisionApi inner, Func<bool> di
     public ValueTask<Result<RawJson, DecisionError>> EvaluateRawAsync(RawJson body, string authorization, int? retryCount, CancellationToken ct)
         => disposed() ? DisposedFailure<RawJson>(exception: null) : Checked(inner.EvaluateRawAsync(body, authorization, retryCount, ct));
 
+    public ValueTask<Result<RawJson, DecisionError>> SendAsync(RawJson body, string path, string authorization, int? retryCount, CancellationToken ct)
+        => disposed() ? DisposedFailure<RawJson>(exception: null) : Checked(inner.SendAsync(body, path, authorization, retryCount, ct));
+
     public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(string authorization, int? retryCount, CancellationToken ct)
         => disposed() ? DisposedFailure<ModelList>(exception: null) : Checked(inner.ListModelsAsync(authorization, retryCount, ct));
 

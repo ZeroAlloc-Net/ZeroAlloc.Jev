@@ -35,6 +35,9 @@ internal sealed class LoggingDecisionApi(IDecisionApi inner, ILogger logger, Ret
     public ValueTask<Result<RawJson, DecisionError>> EvaluateRawAsync(RawJson body, string authorization, int? retryCount, CancellationToken ct)
         => Observe(inner.EvaluateRawAsync(body, authorization, retryCount, ct), retryCount);
 
+    public ValueTask<Result<RawJson, DecisionError>> SendAsync(RawJson body, string path, string authorization, int? retryCount, CancellationToken ct)
+        => Observe(inner.SendAsync(body, path, authorization, retryCount, ct), retryCount);
+
     public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(string authorization, int? retryCount, CancellationToken ct)
         => Observe(inner.ListModelsAsync(authorization, retryCount, ct), retryCount);
 

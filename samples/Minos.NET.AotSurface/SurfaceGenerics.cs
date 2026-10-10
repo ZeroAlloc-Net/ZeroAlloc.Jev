@@ -51,7 +51,10 @@ public static class SurfaceGenerics
         _ = DecisionContent.FromValue(state, SurfaceStateJsonContext.Default.SurfaceState);
     }
 
-    /// <summary>Calls every public generic evaluation method, on the interface and on the client.</summary>
+    /// <summary>
+    /// Calls every public generic evaluation method: the <see cref="DecisionClientExtensions"/> over the interface, and
+    /// the client's own members.
+    /// </summary>
     public static async Task EvaluateAsync(IDecisionClient client, DecisionClient decisionClient, JsonElement json, SurfaceState state)
     {
         var stateInfo = SurfaceStateJsonContext.Default.SurfaceState;
@@ -61,6 +64,8 @@ public static class SurfaceGenerics
         _ = await client.EvaluateAsync<SurfaceTriage>(json).ConfigureAwait(false);
         _ = await client.EvaluateAsync<SurfaceTriage>(json, CancellationToken.None).ConfigureAwait(false);
         _ = await client.EvaluateUtf8Async<SurfaceTriage>("{}"u8.ToArray()).ConfigureAwait(false);
+        _ = await client.EvaluateUtf8Async<SurfaceTriage>("{}"u8.ToArray(), CancellationToken.None).ConfigureAwait(false);
+        _ = client.GetService<DecisionClientMetadata>();
         _ = await client.EvaluateAsync<SurfaceStateTriage, SurfaceState>(state, stateInfo).ConfigureAwait(false);
         _ = await client.EvaluateAsync<SurfaceStateTriage, SurfaceState>(state, stateInfo, CancellationToken.None).ConfigureAwait(false);
 

@@ -17,7 +17,7 @@ public sealed class AddDecisionClientEnvironmentTests
         services.AddDecisionClient(options => options.ApiKey = "di-key").ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
-        _ = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.Equal(new Uri("http://env.local/minos/v1/systemone"), OnlyRequest(handler).Uri);
     }

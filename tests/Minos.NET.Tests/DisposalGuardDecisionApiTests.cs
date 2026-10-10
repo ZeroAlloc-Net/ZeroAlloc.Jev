@@ -21,6 +21,7 @@ public sealed class DisposalGuardDecisionApiTests
 
         AllocationGate.AssertBudgetValueTask(0, 1000, () => guard.EvaluateAsync(Request, "Bearer k", null, CancellationToken.None), "GuardEvaluate");
         AllocationGate.AssertBudgetValueTask(0, 1000, () => guard.EvaluateRawAsync(body, "Bearer k", null, CancellationToken.None), "GuardEvaluateRaw");
+        AllocationGate.AssertBudgetValueTask(0, 1000, () => guard.SendAsync(body, "v1/systemone", "Bearer k", null, CancellationToken.None), "GuardSend");
         AllocationGate.AssertBudgetValueTask(0, 1000, () => guard.ListModelsAsync("Bearer k", null, CancellationToken.None), "GuardListModels");
         Assert.True(inner.Calls > 0);
     }
@@ -43,6 +44,7 @@ public sealed class DisposalGuardDecisionApiTests
 
         AssertDisposed(guard.EvaluateAsync(Request, "Bearer k", 1, CancellationToken.None));
         AssertDisposed(guard.EvaluateRawAsync(body, "Bearer k", 1, CancellationToken.None));
+        AssertDisposed(guard.SendAsync(body, "v1/systemone", "Bearer k", 1, CancellationToken.None));
         AssertDisposed(guard.ListModelsAsync("Bearer k", 1, CancellationToken.None));
         Assert.Equal(0, inner.Calls);
     }
@@ -111,6 +113,12 @@ public sealed class DisposalGuardDecisionApiTests
             return new(Raw);
         }
 
+        public ValueTask<Result<RawJson, DecisionError>> SendAsync(RawJson body, string path, string authorization, int? retryCount, CancellationToken ct)
+        {
+            Calls++;
+            return new(Raw);
+        }
+
         public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(string authorization, int? retryCount, CancellationToken ct)
         {
             Calls++;
@@ -128,6 +136,9 @@ public sealed class DisposalGuardDecisionApiTests
         public ValueTask<Result<RawJson, DecisionError>> EvaluateRawAsync(RawJson body, string authorization, int? retryCount, CancellationToken ct)
             => ValueTask.FromException<Result<RawJson, DecisionError>>(thrown);
 
+        public ValueTask<Result<RawJson, DecisionError>> SendAsync(RawJson body, string path, string authorization, int? retryCount, CancellationToken ct)
+            => ValueTask.FromException<Result<RawJson, DecisionError>>(thrown);
+
         public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(string authorization, int? retryCount, CancellationToken ct)
             => ValueTask.FromException<Result<ModelList, DecisionError>>(thrown);
     }
@@ -139,6 +150,9 @@ public sealed class DisposalGuardDecisionApiTests
             => throw new NotSupportedException();
 
         public ValueTask<Result<RawJson, DecisionError>> EvaluateRawAsync(RawJson body, string authorization, int? retryCount, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public ValueTask<Result<RawJson, DecisionError>> SendAsync(RawJson body, string path, string authorization, int? retryCount, CancellationToken ct)
             => throw new NotSupportedException();
 
         public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(string authorization, int? retryCount, CancellationToken ct)

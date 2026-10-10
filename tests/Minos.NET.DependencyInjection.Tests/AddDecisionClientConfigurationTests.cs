@@ -47,7 +47,7 @@ public sealed class AddDecisionClientConfigurationTests
         services.AddDecisionClient(configuration).ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.True(result.IsSuccess);
         Assert.Equal(new Uri("http://bound.local/api/v1/systemone"), OnlyRequest(handler).Uri);
