@@ -51,6 +51,50 @@ public sealed class SystemOneResponseReaderTests
         Assert.Null(result.Value.OutputTokens);
     }
 
+    [Fact]
+    public void A_repeated_field_keeps_its_first_value()
+    {
+        var body = """
+            {"model":"first","model":"second","id":"a","id":"b","provider":"p1","provider":"p2",
+             "answers":{"is_urgent":{"type":"noul","noul":0.5}},
+             "usage":{"input_tokens":1,"input_tokens":2,"output_tokens":3,"output_tokens":4,"cost":0.5,"cost":0.9},
+             "usage":{"input_tokens":8,"output_tokens":9,"cost":1.5}}
+            """u8;
+
+        var response = SystemOneProtocol.Instance.ReadResponse(body, Urgency).Value;
+
+        Assert.Equal("first", response.Model);
+        Assert.Equal("a", response.Id);
+        Assert.Equal("p1", response.Provider);
+        Assert.Equal(1, response.InputTokens);
+        Assert.Equal(3, response.OutputTokens);
+        Assert.Equal(0.5, response.Cost);
+    }
+
+    [Fact]
+    public void Fields_of_the_wrong_type_are_treated_as_absent()
+    {
+        var result = SystemOneProtocol.Instance.ReadResponse(
+            """{"model":5,"id":{},"provider":[1],"answers":{"is_urgent":{"type":"noul","noul":0.5}}}"""u8, Urgency);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.Model);
+        Assert.Null(result.Value.Id);
+        Assert.Null(result.Value.Provider);
+    }
+
+    [Fact]
+    public void A_leading_utf8_bom_is_skipped()
+    {
+        var json = System.Text.Encoding.UTF8.GetBytes("""{"model":"m","answers":{"is_urgent":{"type":"noul","noul":0.5}}}""");
+        byte[] body = [0xEF, 0xBB, 0xBF, .. json];
+
+        var result = SystemOneProtocol.Instance.ReadResponse(body, Urgency);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("m", result.Value.Model);
+    }
+
     [Theory]
     [InlineData("[]", "The response body is not a JSON object.")]
     [InlineData("""{"model":"m"}""", "The response has no answers.")]

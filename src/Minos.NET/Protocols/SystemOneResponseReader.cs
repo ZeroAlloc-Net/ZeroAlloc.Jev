@@ -7,7 +7,7 @@ namespace Minos.Protocols;
 /// <remarks>
 /// Fails exactly as the typed path did: the same messages, status 200, and <see cref="DecisionErrorKind.InvalidResponse"/>.
 /// <c>model</c>, <c>usage</c>, <c>id</c> and <c>provider</c> are optional and read leniently: a field of the wrong type is
-/// treated as absent, never as an error, as telemetry has always read them.
+/// treated as absent, never as an error, as telemetry has always read them. A repeated field keeps its first value.
 /// </remarks>
 internal static class SystemOneResponseReader
 {
@@ -48,17 +48,17 @@ internal static class SystemOneResponseReader
                 else if (reader.ValueTextEquals("model"u8))
                 {
                     reader.Read();
-                    model = StringOrSkip(ref reader);
+                    model ??= StringOrSkip(ref reader);
                 }
                 else if (reader.ValueTextEquals("id"u8))
                 {
                     reader.Read();
-                    id = StringOrSkip(ref reader);
+                    id ??= StringOrSkip(ref reader);
                 }
                 else if (reader.ValueTextEquals("provider"u8))
                 {
                     reader.Read();
-                    provider = StringOrSkip(ref reader);
+                    provider ??= StringOrSkip(ref reader);
                 }
                 else if (reader.ValueTextEquals("usage"u8))
                 {
@@ -117,13 +117,13 @@ internal static class SystemOneResponseReader
             reader.Read();
             switch (field)
             {
-                case 1 when reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var input):
+                case 1 when reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var input) && inputTokens is null:
                     inputTokens = input;
                     break;
-                case 2 when reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var output):
+                case 2 when reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var output) && outputTokens is null:
                     outputTokens = output;
                     break;
-                case 3 when reader.TokenType == JsonTokenType.Number && reader.TryGetDouble(out var value):
+                case 3 when reader.TokenType == JsonTokenType.Number && reader.TryGetDouble(out var value) && cost is null:
                     cost = value;
                     break;
                 default:
