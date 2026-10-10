@@ -1,4 +1,7 @@
+using System.Text;
 using System.Text.Json;
+using ZeroAlloc.Results;
+using ZeroAlloc.TestHelpers;
 
 namespace Minos.Tests;
 
@@ -96,5 +99,47 @@ public sealed class DecisionClientExtensionsTests
         Assert.Same(fake, fake.GetService<IDecisionClient>());
         Assert.Null(fake.GetService<DecisionClientMetadata>());
         Assert.Null(fake.GetService<ClientTestKit.CapturingClient>(serviceKey: "key"));
+    }
+
+    // On main the UTF-8 overload copied the caller's bytes straight into the request. Over a client that answers with one
+    // completed response, it may cost no more than the text overload, which allocates nothing for its state: no
+    // JsonDocument and no copy of the bytes.
+    [Fact]
+    public void Utf8_state_allocates_no_more_than_a_text_state()
+    {
+        var client = new FixedClient(ClientTestKit.CapturingClient.Canned(UrgencyCheck.Definition));
+        ReadOnlyMemory<byte> utf8 = Encoding.UTF8.GetBytes("""{"messages":[{"role":"user","content":"Help!"}]}""");
+
+        AllocationGate.AssertNoMoreThanValueTask(
+            1000, () => client.EvaluateAsync<UrgencyCheck>("text"), () => client.EvaluateUtf8Async<UrgencyCheck>(utf8), "Utf8State");
+    }
+
+    // The JsonElement overload clones the element once per call, so the caller may dispose its document as soon as the
+    // call returns. That copy is its whole extra cost over the text overload: 304 B per call for this one-message log.
+    [Fact]
+    public void JsonElement_state_costs_one_clone_per_call()
+    {
+        var client = new FixedClient(ClientTestKit.CapturingClient.Canned(UrgencyCheck.Definition));
+        using var document = JsonDocument.Parse("""{"messages":[{"role":"user","content":"Help!"}]}""");
+        var element = document.RootElement;
+
+        var text = AllocationGate.MeasureBytesPerCallValueTask(1000, () => client.EvaluateAsync<UrgencyCheck>("text"));
+        var json = AllocationGate.MeasureBytesPerCallValueTask(1000, () => client.EvaluateAsync<UrgencyCheck>(element));
+        var clone = AllocationGate.MeasureBytesPerCall(1000, () => _ = element.Clone());
+
+        Assert.Equal(304, clone);
+        Assert.Equal(text + clone, json);
+    }
+
+    private sealed class FixedClient(DecisionResponse response) : IDecisionClient
+    {
+        public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
+            => new(Result<DecisionResponse, DecisionError>.Success(response));
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
     }
 }

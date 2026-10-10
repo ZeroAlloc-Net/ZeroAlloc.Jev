@@ -126,6 +126,45 @@ public sealed class DecisionClientTypedTests : IDisposable
             c => c.EvaluateAsync<UrgencyCheck>(state));
     }
 
+    // On main a caller could dispose its document as soon as the call returned, since the body was already written. The
+    // overload clones the element, so a retry that writes the request again, after the caller disposed it, still can.
+    [Fact]
+    public async Task JsonElement_DocumentDisposedRightAfterTheCall_IsStillSentOnARetry()
+    {
+        var firstAttemptMayAnswer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+        var handler = new StubHandler(async (_, _) =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+            {
+                await firstAttemptMayAnswer.Task;
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(Fixture.Text("response-noul.json"), Encoding.UTF8, "application/json"),
+            };
+        });
+        using var client = ClientTestKit.Client(_httpClients, handler, configure: o =>
+        {
+            o.MaxRetries = 1;
+            o.InitialBackoff = TimeSpan.FromMilliseconds(1);
+            o.Jitter = false;
+        });
+
+        var document = JsonDocument.Parse(TicketJson);
+        var call = client.EvaluateAsync<UrgencyCheck>(document.RootElement);
+        document.Dispose();
+        Assert.False(call.IsCompleted);
+        firstAttemptMayAnswer.SetResult();
+        var result = await call;
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, sent => Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, TicketJson), sent.Body));
+    }
+
     [Fact]
     public Task Utf8_SendsTheDefaultPathsRequest()
     {
