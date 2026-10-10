@@ -1,49 +1,4 @@
 #nullable enable
-Minos.AnswerSlots
-Minos.AnswerSlots.AnswerSlots() -> void
-Minos.AnswerSlots.Choice<T>(int index, Minos.DecisionOptionSet<T>! options) -> Minos.Choice<T>
-Minos.AnswerSlots.Count.get -> int
-Minos.AnswerSlots.Noul(int index) -> Minos.Noul
-Minos.AnswerSlots.Score<T>(int index, Minos.DecisionOptionSet<T>! options) -> Minos.Score<T>
-Minos.Criterion.Description.get -> string?
-Minos.Criterion.Examples.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Minos.Criterion.JsonContent.get -> Minos.DecisionContent?
-Minos.Criterion.NotFor.get -> System.Collections.Generic.IReadOnlyList<string!>!
-Minos.IQuestionSet<TSelf>.Create(Minos.AnswerSlots answers) -> TSelf
-Minos.IQuestionSet<TSelf>.Definition.get -> Minos.QuestionSetDefinition!
-Minos.OptionDefinition
-Minos.OptionDefinition.Criterion.get -> Minos.Criterion?
-Minos.OptionDefinition.Key.get -> string!
-Minos.OptionDefinition.OptionDefinition(string! key, Minos.Criterion? criterion) -> void
-Minos.QuestionDefinition
-Minos.QuestionDefinition.Instructions.get -> Minos.DecisionContent
-Minos.QuestionDefinition.Key.get -> string!
-Minos.QuestionDefinition.Kind.get -> Minos.QuestionKind
-Minos.QuestionDefinition.Options.get -> System.Collections.Generic.IReadOnlyList<Minos.OptionDefinition!>!
-Minos.QuestionDefinition.WhenFalse.get -> Minos.DecisionContent?
-Minos.QuestionDefinition.WhenTrue.get -> Minos.DecisionContent?
-Minos.QuestionKind
-Minos.QuestionKind.Choice = 1 -> Minos.QuestionKind
-Minos.QuestionKind.Noul = 0 -> Minos.QuestionKind
-Minos.QuestionKind.Score = 2 -> Minos.QuestionKind
-Minos.QuestionSetDefinition
-Minos.QuestionSetDefinition.QuestionSetDefinition(params System.ReadOnlySpan<Minos.QuestionDefinition!> questions) -> void
-Minos.QuestionSetDefinition.Questions.get -> System.Collections.Generic.IReadOnlyList<Minos.QuestionDefinition!>!
-static Minos.QuestionDefinition.Choice(string! key, Minos.DecisionContent instructions, params System.ReadOnlySpan<Minos.OptionDefinition!> options) -> Minos.QuestionDefinition!
-static Minos.QuestionDefinition.Noul(string! key, Minos.DecisionContent instructions, Minos.DecisionContent? whenTrue = null, Minos.DecisionContent? whenFalse = null) -> Minos.QuestionDefinition!
-static Minos.QuestionDefinition.Score(string! key, Minos.DecisionContent instructions, params System.ReadOnlySpan<Minos.Criterion!> levels) -> Minos.QuestionDefinition!
-Minos.QuestionSet.Definition.get -> Minos.QuestionSetDefinition!
-*REMOVED*abstract Minos.DecisionOptionSet<T>.IndexOfKey(ref System.Text.Json.Utf8JsonReader reader) -> int
-*REMOVED*Minos.AnswerReader
-*REMOVED*Minos.IQuestionSet<TSelf>.Parse(ref System.Text.Json.Utf8JsonReader answers) -> TSelf
-*REMOVED*Minos.IQuestionSet<TSelf>.QuestionsUtf8.get -> System.ReadOnlySpan<byte>
-*REMOVED*Minos.QuestionSet.QuestionsUtf8.get -> System.ReadOnlySpan<byte>
-*REMOVED*static Minos.AnswerReader.EnsureStartObject(ref System.Text.Json.Utf8JsonReader reader) -> void
-*REMOVED*static Minos.AnswerReader.MissingAnswer(string! key) -> System.Text.Json.JsonException!
-*REMOVED*static Minos.AnswerReader.NextProperty(ref System.Text.Json.Utf8JsonReader reader) -> bool
-*REMOVED*static Minos.AnswerReader.ReadChoice<T>(ref System.Text.Json.Utf8JsonReader reader, Minos.DecisionOptionSet<T>! options, double[]! buffer, int offset) -> Minos.Choice<T>
-*REMOVED*static Minos.AnswerReader.ReadNoul(ref System.Text.Json.Utf8JsonReader reader) -> Minos.Noul
-*REMOVED*static Minos.AnswerReader.ReadScore<T>(ref System.Text.Json.Utf8JsonReader reader, Minos.DecisionOptionSet<T>! options, double[]! buffer, int offset) -> Minos.Score<T>
 Minos.DecisionClientMetadata
 Minos.DecisionClientMetadata.<Clone>$() -> Minos.DecisionClientMetadata!
 Minos.DecisionClientMetadata.DecisionClientMetadata(string! ProviderName, System.Uri? Endpoint, string? DefaultModel) -> void

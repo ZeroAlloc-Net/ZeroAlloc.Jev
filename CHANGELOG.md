@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7.0](https://github.com/MarcelRoozekrans/Minos.NET/compare/v0.6.0...v0.7.0) (2026-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** replace the systemone literal and parser with the neutral definition
+* **core:** IQuestionSet drops QuestionsUtf8 and Parse for a static Definition and a static Create over AnswerSlots, QuestionSet drops QuestionsUtf8 for Definition, AnswerReader is removed, DecisionOptionSet drops IndexOfKey, MIN102 reserves the property names Definition and Create instead of Parse and QuestionsUtf8, and an empty Key on a question or a Criteria attribute is now the build error MIN106 instead of an empty wire key.
+
+### Features
+
+* **core:** add a provider-neutral question set definition that generated and built sets expose ([b919ba3](https://github.com/MarcelRoozekrans/Minos.NET/commit/b919ba3c061df451ee24aec511e4c953bf0fc7f7))
+* **core:** let a criterion be read back from a definition ([b919ba3](https://github.com/MarcelRoozekrans/Minos.NET/commit/b919ba3c061df451ee24aec511e4c953bf0fc7f7))
+
+
+### Bug Fixes
+
+* **deps:** move pydantic_core with pydantic so the benchmark requirements install ([23af2d6](https://github.com/MarcelRoozekrans/Minos.NET/commit/23af2d6cbb2f4f97ac21cb89ff1ae61176717e25))
+
+
+### Code Refactoring
+
+* **core:** replace the systemone literal and parser with the neutral definition ([b919ba3](https://github.com/MarcelRoozekrans/Minos.NET/commit/b919ba3c061df451ee24aec511e4c953bf0fc7f7))
+
 ## [0.6.0](https://github.com/MarcelRoozekrans/Minos.NET/compare/v0.5.3...v0.6.0) (2026-10-10)
 
 
