@@ -28,6 +28,18 @@ public sealed class OpenTelemetryDecisionClientTests
         }
     }
 
+    private sealed class Pending(TaskCompletionSource<Result<DecisionResponse, DecisionError>> source) : IDecisionClient
+    {
+        public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
+            => new(source.Task);
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
     private sealed class Bare(Result<DecisionResponse, DecisionError> result) : IDecisionClient
     {
         public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
@@ -150,14 +162,17 @@ public sealed class OpenTelemetryDecisionClientTests
     [Fact]
     public async Task Returns_the_inner_call_when_nothing_listens()
     {
-        using var stage = new OpenTelemetryDecisionClient(new Scripted(OkWithEnvelope()));
+        var pending = new TaskCompletionSource<Result<DecisionResponse, DecisionError>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var stage = new OpenTelemetryDecisionClient(new Pending(pending));
 
         var call = stage.EvaluateAsync(Request);
 
-        Assert.True(call.IsCompletedSuccessfully);
-        Assert.True((await call).IsSuccess);
+        Assert.False(call.IsCompleted);
+        Assert.Same(pending.Task, call.AsTask());
+        pending.SetResult(OkWithEnvelope());
+        Assert.True((await pending.Task).IsSuccess);
+        Assert.True(call.IsCompleted);
     }
-
     [Fact]
     public async Task One_span_covers_every_retry()
     {

@@ -298,26 +298,32 @@ public sealed class OperationsProxyTests
             ["gen_ai.client.inference.operation.output_tokens"] = ("{token}", DecisionTelemetry.TokenBuckets.ToArray()),
             ["minos.answer.confidence"] = ("1", DecisionTelemetry.ConfidenceBuckets.ToArray()),
         };
-        var declared = 0;
+        Type[] interfaces = [typeof(IDecisionOperations), typeof(IDecisionEvaluation)];
+        var declared = new Dictionary<Type, int> { [typeof(IDecisionOperations)] = 0, [typeof(IDecisionEvaluation)] = 0 };
 
         // Reads the literals themselves, so a drifted copy fails here even if the generator keeps one instrument per name.
-        foreach (var method in typeof(IDecisionOperations).GetMethods())
+        foreach (var type in interfaces)
         {
-            foreach (var histogram in method.GetCustomAttributes<HistogramAttribute>())
+            foreach (var method in type.GetMethods())
             {
-                AssertDeclared(expected, method.Name, histogram.Metric, histogram.Unit, histogram.Buckets);
-                declared++;
-            }
+                foreach (var histogram in method.GetCustomAttributes<HistogramAttribute>())
+                {
+                    AssertDeclared(expected, method.Name, histogram.Metric, histogram.Unit, histogram.Buckets);
+                    declared[type]++;
+                }
 
-            foreach (var histogram in method.GetCustomAttributes<HistogramFromResultAttribute>())
-            {
-                AssertDeclared(expected, method.Name, histogram.Metric, histogram.Unit, histogram.Buckets);
-                declared++;
+                foreach (var histogram in method.GetCustomAttributes<HistogramFromResultAttribute>())
+                {
+                    AssertDeclared(expected, method.Name, histogram.Metric, histogram.Unit, histogram.Buckets);
+                    declared[type]++;
+                }
             }
         }
 
-        // The duration on all four methods, and both token histograms and the confidence histogram on the three evaluations.
-        Assert.Equal(13, declared);
+        // Per interface: the duration on all four operations, and both token histograms and the confidence histogram on the three
+        // evaluations; the telemetry stage repeats the duration, both token histograms and the confidence histogram once.
+        Assert.Equal(13, declared[typeof(IDecisionOperations)]);
+        Assert.Equal(4, declared[typeof(IDecisionEvaluation)]);
     }
 
     [Fact]
