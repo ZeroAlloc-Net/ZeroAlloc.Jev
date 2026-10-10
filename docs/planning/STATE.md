@@ -1,6 +1,6 @@
-# Session State — 2026-10-10 (Phase 6.2 complete: the neutral question model)
+# Session State — 2026-10-11 (Phase 6.3 complete: the IDecisionClient pipeline)
 
-**Date:** 2026-10-10
+**Date:** 2026-10-11
 
 ## Current Position
 - **Roadmap:** re-planned on 2026-10-09 (`docs/superpowers/specs/2026-10-09-roadmap-design.md`).
@@ -33,7 +33,19 @@
   - **Removed:** `QuestionsUtf8`, `Parse`, `AnswerReader` and `IndexOfKey`. MIN102 reserves `Definition` and `Create`; an empty `Key` is MIN106.
   - **Deferred to Phase 6.3**, in its ROADMAP goal: the endpoint path, the response envelope and telemetry reading, `DecisionErrorMapper`, and the default `IDecisionClient` typed path.
   - #140 fixed the benchmark requirements: pydantic_core moves with pydantic, and pydantic updates wait for dashboard approval.
-  - **Leave #141 (0.7.0) open** until a release is wanted.
+  - #141 (0.7.0) merged: v0.7.0 is a GitHub release.
+- **Milestone 6, Phase 6.3 (IDecisionClient abstraction and pipeline):** complete on 2026-10-11.
+  - **Merged:** #146, in the 0.8.0 release PR #148 as a breaking change. Pre-push review PASS: `docs/plans/2026-10-10-phase-6.3-pre-push-review.md`. The live smoke has not been run on `main` yet.
+  - **What shipped:**
+    - `IDecisionClient` is one neutral `EvaluateAsync(DecisionRequest)` returning `Result<DecisionResponse, DecisionError>`, plus `GetService` and `IDisposable`. The typed and built-set calls are `DecisionClientExtensions`.
+    - The pipeline: `DelegatingDecisionClient`, `DecisionClientBuilder` with `AsBuilder`, and the retry, logging and OpenTelemetry stages. `DecisionClient` runs them in that order over an internal one-attempt `DecisionTransport`; `UseStandardPipeline = false` leaves the bare transport, and then the raw calls do not retry either.
+    - The protocol owns the endpoint path, the response envelope and the error body. `AddDecisionClient` returns `DecisionClientServiceBuilder`, with `.HttpClient` and `.Name`.
+    - Six new AOT allocation gates; the typed call measures 3248 B. The UTF-8 and typed-state overloads send exactly the bytes main sent; the UTF-8 state is copied and the `JsonElement` state is cloned, so a caller may reuse or dispose either as soon as the call returns.
+    - Observability: neutral calls report `evaluate-set`, event 1001 logs the provider's metadata name, and typed spans gain `gen_ai.response.id` and `minos.usage.cost`.
+  - **Upstream:** ZeroAlloc.Rest#422 added the `{**path}` route token (3.3.0) and #425 made it cost 0 B (3.3.1). Minos uses Rest 3.3.1 and Results 1.4.0.
+  - **Filed:** #145, the PackTests hang under MSBuild node reuse; set `MSBUILDDISABLENODEREUSE=1` until it is fixed.
+  - **Release-please:** a multi-commit override needs every commit after the first in `BEGIN_NESTED_COMMIT` … `END_NESTED_COMMIT`, or the breaking-change notes are mis-assigned. #146's body was fixed that way and #148 is correct.
+  - **Leave #148 (0.8.0) open** until a release is wanted. #119 stays open: its escalation, fallback chain and sample are Milestone 10.
 - **Old Phase 5.5 (1.0 release):** removed from Milestone 5 and folded into Phase 7.4.
   - Its reviewed pipeline work sits on the local branch `phase/5.5-release`, not pushed:
     - inspection script;
@@ -56,7 +68,8 @@
 
 ## Recommended Next Step
 1. Milestone 6, Provider-neutral core, is active (design `docs/superpowers/specs/2026-10-09-milestone-6-design.md`).
-2. Next: Phase 6.3, the `IDecisionClient` abstraction and pipeline (#119). It needs a brainstorm; its open question is whether `IDecisionClient` lives in the core or in an `.Extensions.AI` package. Its goal also carries the parts Phase 6.2 left outside the seam.
+2. Next: Phase 6.4, the `/v1/systemone` adapter (#115). It needs a brainstorm. It builds on Phase 6.3's protocol seam and `DecisionClientMetadata`: presets for TypeSafe, OpenRouter, Clef, vLLM-SR and local servers, capability flags, optional auth and keyed DI clients.
+   - Before it, optionally run the live smoke on `main` to confirm Phase 6.3 against the real APIs.
 3. Run `pre-push-review` on each feature branch before its PR, and keep the report in `docs/plans/`: the docs tests treat every file at the top of `docs/` as a site page.
 4. Allocation gates run only in the published AOT smoke executable, not in `dotnet test`: publish and run it for any change under `src/`.
 

@@ -292,11 +292,13 @@ compress_memory: disabled
 **Plan:** `docs/superpowers/plans/2026-10-10-phase-6.2-neutral-question-model.md`
 **Completed:** 2026-10-10
 
-### Phase 6.3: IDecisionClient abstraction and pipeline [status: pending]
+### Phase 6.3: IDecisionClient abstraction and pipeline [status: complete]
 **Goal:** An `IDecisionClient` following Microsoft.Extensions.AI conventions, with a builder pipeline in which retries, telemetry and logging become stages (core of #119). The client chooses its protocol, and the parts Phase 6.2 left outside the seam move behind it: the endpoint path in `IDecisionApi`, finding `answers` in the response envelope, telemetry's `ResponseFields` and `ConfidenceValues`, `DecisionErrorMapper`, and the typed path of the default `IDecisionClient` interface methods, which still builds a raw `SystemOneRequest` for clients other than `DecisionClient`.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Spec:** `docs/superpowers/specs/2026-10-10-phase-6.3-decision-client-pipeline-design.md`
+**Plan:** `docs/superpowers/plans/2026-10-10-phase-6.3-decision-client-pipeline.md`
+**Completed:** 2026-10-11
 
 ### Phase 6.4: /v1/systemone adapter [status: pending]
 **Goal:** Configurable base URL and model with presets for TypeSafe, OpenRouter, Cloudflare Clef, vLLM-SR and local servers; capability flags with typed errors naming provider and question; optional auth; keyed DI clients (#115).

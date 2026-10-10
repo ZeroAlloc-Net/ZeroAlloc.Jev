@@ -23,7 +23,7 @@ One typed question set runs against TypeSafe, OpenRouter, OpenAI and a local `/v
 ## Phases
 1. Phase 6.1 — Rename to Minos and move out of the ZeroAlloc org [complete]
 2. Phase 6.2 — Neutral question model and adapter boundary [complete]
-3. Phase 6.3 — IDecisionClient abstraction and pipeline [pending]
+3. Phase 6.3 — IDecisionClient abstraction and pipeline [complete]
 4. Phase 6.4 — /v1/systemone adapter [pending]
 5. Phase 6.5 — OpenAI /v1/decisions adapter and image state [pending]
 6. Phase 6.6 — Conformance suite [pending]
