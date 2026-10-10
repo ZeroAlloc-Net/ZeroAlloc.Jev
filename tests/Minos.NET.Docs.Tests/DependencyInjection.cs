@@ -124,7 +124,8 @@ public sealed class TraceHeaderHandler : DelegatingHandler
 
 public static class HandlerRegistration
 {
-    // The HttpClient property of the builder AddDecisionClient returns is the client's HttpClient builder, so handlers are added the usual way.
+    // The HttpClient property of the builder AddDecisionClient returns is the client's HttpClient builder, so handlers
+    // are added the usual way.
     public static IHttpClientBuilder AddTracedDecision(IServiceCollection services, string apiKey)
     {
         services.AddTransient<TraceHeaderHandler>();

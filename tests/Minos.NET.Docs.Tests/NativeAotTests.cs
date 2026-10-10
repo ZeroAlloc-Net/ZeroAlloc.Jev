@@ -146,14 +146,18 @@ public sealed partial class NativeAotTests
         Assert.Contains("It measures 2648 B", aot, StringComparison.Ordinal);
         Assert.Contains("211 B, measured under the JIT", aot, StringComparison.Ordinal);
 
+        var performance = Source("docs", "performance.md");
         var observability = Source("docs", "observability.md");
         Assert.Contains("about 480 B", observability, StringComparison.Ordinal);
         Assert.Contains("211 B, measured under the JIT", observability, StringComparison.Ordinal);
-        Assert.Contains("a typed call pays 1560 B, which is 4544 B listening", observability, StringComparison.Ordinal);
-        Assert.Contains("against 2984 B with nothing listening", observability, StringComparison.Ordinal);
+        Assert.Contains("a typed call pays 1368 B, which is 4792 B listening", observability, StringComparison.Ordinal);
+        Assert.Contains("against 3424 B with nothing listening", observability, StringComparison.Ordinal);
+        Assert.Contains("4792 B", performance, StringComparison.Ordinal);
+        Assert.Contains("3424 B", performance, StringComparison.Ordinal);
 
-        // The 1560 B is the difference of the two measured figures.
-        Assert.Equal(1560, 4544 - 2984);
+        // The 1368 B is the difference of the two measured figures, for the typed call and for the neutral one.
+        Assert.Equal(1368, 4792 - 3424);
+        Assert.Equal(1368, 4616 - 3248);
     }
 
     [GeneratedRegex(@"AllocationChecks\.(?<gate>\w+)\(\)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]

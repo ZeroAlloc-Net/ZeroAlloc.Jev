@@ -38,6 +38,7 @@ public static class ClientOptions
             InitialBackoff = TimeSpan.FromMilliseconds(500),
             MaxRetryDelay = TimeSpan.FromSeconds(30),
             Jitter = true,
+            UseStandardPipeline = true,
         };
     #endregion
 

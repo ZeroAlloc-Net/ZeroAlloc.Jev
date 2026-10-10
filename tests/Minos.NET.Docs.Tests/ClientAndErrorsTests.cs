@@ -231,6 +231,7 @@ public sealed class ClientAndErrorsTests
         Assert.Equal(defaults.InitialBackoff, spelledOut.InitialBackoff);
         Assert.Equal(defaults.MaxRetryDelay, spelledOut.MaxRetryDelay);
         Assert.Equal(defaults.Jitter, spelledOut.Jitter);
+        Assert.Equal(defaults.UseStandardPipeline, spelledOut.UseStandardPipeline);
         Assert.Null(defaults.ApiKey);
         Assert.Null(defaults.BaseAddress);
         Assert.Equal("jev-latest", DecisionDefaults.Model);

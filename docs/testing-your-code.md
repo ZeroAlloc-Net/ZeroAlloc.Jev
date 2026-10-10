@@ -1,7 +1,7 @@
 ---
 id: testing-your-code
 title: Testing your code
-sidebar_position: 10
+sidebar_position: 11
 description: Test code that calls Jev with a fake IDecisionClient or a real DecisionClient over a canned HTTP reply, and pin each decision.
 ---
 
@@ -84,15 +84,16 @@ a host supplies the real client. A test does not need a container: it builds the
 `IDecisionClient` is the library's interface for calling Jev, and `DecisionClient` implements it. A **fake** is a small class of
 your own that implements it and returns a fixed reply, with no HTTP at all.
 
-A fake implements only two members:
+A fake implements three members:
 
-- `EvaluateAsync(SystemOneRequest, CancellationToken)`, which takes the request and returns a `Result` of a response or
-  a [`DecisionError`](client-and-errors.md#errors);
-- `ListModelsAsync`, which your code probably never calls, so the fake can throw.
+- `EvaluateAsync(DecisionRequest, CancellationToken)`, which takes the request and returns a `Result` of a
+  `DecisionResponse` or a [`DecisionError`](client-and-errors.md#errors);
+- `GetService`, which can return `null`, because the fake offers nothing to look up;
+- `Dispose`, which has nothing to release.
 
-Every other member of the interface, such as the typed `EvaluateAsync<T>` calls your code makes, has a default
-implementation that builds the request and calls the first of those two. So the typed call in the triager, and the
-text, `JsonElement` and UTF-8 overloads, all end up in the one method the fake wrote.
+The typed `EvaluateAsync<T>` call in the triager is an extension method. It builds a `DecisionRequest` from the
+question set's `Definition` and the state, and calls the fake's `EvaluateAsync`. The text, `JsonElement` and UTF-8
+overloads, and a [built question set](question-sets-at-run-time.md), all end up in the same method.
 
 <!-- snippet: TestingYourCode_Fake -->
 ```cs
@@ -152,13 +153,13 @@ public sealed class FakeDecision(Result<DecisionResponse, DecisionError> reply) 
 ```
 <!-- endSnippet -->
 
-The reply is a `SystemOneResponse`, and its answers are keyed by **question key**: the property name in snake_case, so
-`IsUrgent` is `is_urgent`, unless the attribute sets `Key`.
-[Typed evaluation](typed-evaluation.md#declaring-the-questions) has the rule. Each answer is a `NoulAnswer`, a
-`ChoiceAnswer` or a `ScoreAnswer`, and [Question types](question-types.md) says what each one holds. A Choice answer
-names its option by the enum member in snake_case, so `TriageDesk.Billing` is `billing` and `TriageDesk.ProductTeam` is
-`product_team`. The fake gets the keys from `JsonNamingPolicy.SnakeCaseLower`, which converts names the way the
-library does.
+The reply is a `DecisionResponse`, made with its public constructor from the question set's `Definition` and one
+`QuestionAnswer` per question, in the order the set declares them. `QuestionAnswer.Noul` takes the probability.
+`QuestionAnswer.Choice` takes the position of the chosen option in the enum, the confidence and one probability per
+option, and `QuestionAnswer.Score` takes the level, the value, the confidence and the probabilities.
+[Question types](question-types.md) says what each one holds. The constructor checks the answers against the
+definition, so an answer of the wrong kind, or the wrong number of probabilities, throws `ArgumentException` when the
+fake is built, not when the test reads it.
 
 With the fake in hand, a test is a few lines: build the class, call it, assert the decision. The fake also keeps every
 request, so the test can check what the code asked.
@@ -193,10 +194,9 @@ public async Task WhenDecisionFails_ThePersonReviews()
 ```
 <!-- endSnippet -->
 
-If you use a mocking library instead of a hand-written fake, mind the default methods. A mock intercepts them like any
-other member, so set up the overload your code calls, here `EvaluateAsync<T>(string, CancellationToken)`, or enable
-`CallBase` so that the mock runs the real default. A hand-written fake avoids the question, because the defaults do
-the routing.
+If you use a mocking library instead of a hand-written fake, set up `EvaluateAsync(DecisionRequest,
+CancellationToken)`. The typed calls your code makes, such as `EvaluateAsync<T>(string, CancellationToken)`, are
+extension methods, which a mock cannot intercept, and they all reach that one method.
 
 ## Pin each decision
 
@@ -233,12 +233,12 @@ the failure has them.
 
 ## Way two: a real `DecisionClient` over a canned HTTP reply
 
-A fake never runs `DecisionClient`. The client replaces the interface's default typed calls with its own request writer
-and its own parser for the answers, and the defaults send the default model. So a fake cannot tell you that your
-question set builds the request you meant, or that a reply parses into the answers you read. For that, run a real
-`DecisionClient` and replace only the network. A `DecisionClient` can take an `HttpClient` you made, and an `HttpClient` can
-take a **message handler**: the object that actually sends the request. A handler of your own that answers from memory
-means the full client runs, and no packet leaves the machine.
+A fake never runs `DecisionClient`. It skips the protocol, which writes the request from the question set and reads
+the answers from the reply, and the [pipeline](pipeline.md) of retries, logging and telemetry. So a fake cannot tell
+you that your question set builds the request you meant, or that a reply parses into the answers you read. For that,
+run a real `DecisionClient` and replace only the network. A `DecisionClient` can take an `HttpClient` you made, and an
+`HttpClient` can take a **message handler**: the object that actually sends the request. A handler of your own that
+answers from memory means the full client runs, and no packet leaves the machine.
 
 <!-- snippet: TestingYourCode_Handler -->
 ```cs

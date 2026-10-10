@@ -276,11 +276,25 @@ throw `ArgumentException` for it, and do not return a failed `Result`. A `null` 
 come back in the `Result`. In particular, a response that is missing an answer, or that has one of the wrong type, is a
 failure with kind `DecisionErrorKind.InvalidResponse`.
 
-The model is the one in `DecisionClientOptions.Model`, which defaults to the alias `jev-latest`. The generator emits
-a question definition, and `DecisionClient` writes the request from it through the systemone protocol into pooled
-buffers. The protocol caches the questions JSON of each set after the first call. Any other `IDecisionClient`, such as
-a hand-written fake in a test, works as well, through the default interface methods that go by way of
-[`SystemOneRequest`](client-and-errors.md#the-raw-request-api).
+The model is the one in `DecisionClientOptions.Model`, which defaults to the alias `jev-latest`.
+
+### How a typed call reaches the client
+
+The overloads are extension methods in `DecisionClientExtensions`, in the `Minos` namespace, so they work on any
+`IDecisionClient`. Each one builds a `DecisionRequest` from the set's generated `Definition` and the state, makes the
+client's one call, `EvaluateAsync(DecisionRequest)`, and builds the typed answers from the `DecisionResponse` with the
+generated `Create`. So a typed call runs through the client's [pipeline](pipeline.md), with its telemetry, logging and
+retries, and a hand-written fake in a test answers it by implementing that one call, as
+[Testing your code](testing-your-code.md#way-one-a-fake-idecisionclient) shows.
+
+Inside a `DecisionClient`, the protocol writes the request from the definition into pooled buffers, and caches the
+questions JSON of each set after the first call.
+
+Two overloads pay for their state. `EvaluateUtf8Async<T>` parses it with `DecisionContent.FromUtf8Json`, and
+`EvaluateAsync<T, TState>` serializes it with `DecisionContent.FromValue`, into a `JsonDocument` on each call. Before
+the [pipeline](pipeline.md) they wrote the state straight into the request. Under Native AOT the document is 280 B per
+call for the smoke application's state, and [Performance](performance.md#phase-63--the-client-pipeline) has the
+figures. The text and `JsonElement` overloads pay no such cost.
 
 ## DecisionContent
 

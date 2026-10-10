@@ -1,7 +1,7 @@
 ---
 id: performance
 title: Performance
-sidebar_position: 13
+sidebar_position: 14
 description: What the client costs per call, how it compares with other clients, and how to run the benchmarks.
 ---
 
@@ -27,6 +27,7 @@ To be recorded from the first full run.
 
 The phase sections below record each phase's figures as measured then. Where a figure has since changed, today's value is
 given in parentheses, and the table under [Phase 5.1](#phase-51--public-api-review) lists the AOT gates after ZeroAlloc.Rest 3.2.1.
+[Phase 6.3](#phase-63--the-client-pipeline) has the figures after the client pipeline.
 
 ### Phase 2.3 — DecisionContent factories
 
@@ -212,7 +213,7 @@ the redacted request URI and open a logging scope on every request, before they 
   win-x64 AOT. That is 344 B more. This was measured while planning, on 2026-10-01.
 - So `AddDecisionClient` removes them with `RemoveAllLoggers()`. The client still logs each operation and each retried attempt
   itself.
-- `AddDefaultLogger()` on the returned builder brings them back, at that cost.
+- `AddDefaultLogger()` on the `HttpClient` property of the returned builder brings them back, at that cost.
 
 ### Phase 3.4 — Options and configuration
 
@@ -342,6 +343,55 @@ Both build a new definition over the three triage questions of `QuestionSetBench
 `questions` object. The difference, about 0.8 us and 5232 B, is the one-time cost of a set's first serialization: the
 growing buffer, the JSON writer and the finished byte array. Measured on 2026-10-10 on the machine in
 [Comparison](#comparison), with `--job short`, so the means are indicative only.
+
+### Phase 6.3 — The client pipeline
+
+Every `DecisionRequest` call, and so every typed and built-set call, now runs through the
+[standard pipeline](pipeline.md): telemetry, logging, retries and a transport. The phase added six AOT gates. The
+figures are bytes per call under published win-x64 Native AOT, on ZeroAlloc.Rest 3.3.0, and each budget is the
+measurement plus about 10%, rounded up to the next 64 B, per the Phase 1.8 rule.
+
+| Gate | What it measures | Measured | Budget |
+|---|---|---|---|
+| `NeutralEvaluateRoundTrip` | `EvaluateAsync(DecisionRequest)` on the standard pipeline, nothing listening | 3248 B | 3584 B |
+| `NeutralEvaluateRoundTripWhileListening` | The same call with a span and metric listener attached | 4616 B | 5120 B |
+| `BareTransportRoundTrip` | The same call with `UseStandardPipeline` off, the transport alone | 3248 B | 3584 B |
+| `PassThroughStage` | A `DelegatingDecisionClient` that overrides nothing, over an inner call that completes synchronously | 0 B | 0 B |
+| `Utf8StateEvaluateRoundTrip` | A typed `EvaluateUtf8Async<T>` call | 3704 B | 4096 B |
+| `TypedStateEvaluateRoundTrip` | A typed `EvaluateAsync<T, TState>` call, over a one-question response | 3008 B | 3328 B |
+
+What each one allocates:
+
+- **The neutral call** allocates the request's `Utf8JsonWriter` and `RawJson`, ZeroAlloc.Rest's per-attempt
+  `HttpRequestMessage`, headers, `MemoryStream` and `StreamContent`, the response's `HttpResponseMessage` and body
+  buffering, and the `DecisionResponse` with its `AnswerSlot[]` and probabilities.
+- **The standard stages add nothing** to a call that completes synchronously with nothing listening, so the standard
+  pipeline and the bare transport measure the same 3248 B.
+- **A stage that overrides nothing costs nothing.** `DelegatingDecisionClient` returns the inner client's completed
+  `ValueTask` as it is, so `PassThroughStage` is budgeted at exactly 0 B.
+- **Listening** adds the `Activity`, its boxed start tags, the boxed tag and measurement values and each metric's
+  `TagList`: 1368 B over the idle call. A typed call pays the same 1368 B, 4792 B against 3424 B.
+- **The UTF-8 state** costs `TypedEvaluateRoundTrip`'s 3424 B plus the `JsonDocument` that
+  `DecisionContent.FromUtf8Json` parses the state into, 280 B.
+- **The typed state** costs the transport's request and response, the `DecisionResponse`, the result record, and the
+  `JsonDocument` that `DecisionContent.FromValue` serializes the state into, which `ContentFromValue` measures at 280 B
+  for the same state. The text and `JsonElement` overloads do not pay for a `JsonDocument`.
+
+The existing gates over the typed and built-set paths now include the `DecisionRequest`, the `DecisionResponse` and its
+`AnswerSlot[]`. A typed call measures 3424 B, against 2984 B before the pipeline, and a built-set call 3616 B, against
+3272 B. Listening, they measure 4792 B and 4984 B, against 4544 B and 4832 B. A typed call that completes
+asynchronously with telemetry off measures 4565 B, against 4184 B, which includes every boxed async state machine,
+among them the retry stage's and the typed extension's. No budget was raised.
+
+**ZeroAlloc.Rest 3.3.0's path escaping.** The transport posts to the protocol's endpoint path through a `{**path}`
+route, which ZeroAlloc.Rest 3.3.0 added in
+[ZeroAlloc.Rest#422](https://github.com/ZeroAlloc-Net/ZeroAlloc.Rest/issues/422). Release 3.3.0 escapes that path on every call with a `StringBuilder` and a string, about 176 B, and every HTTP figure on
+this page from Phase 6.3 includes it. [ZeroAlloc.Rest#425](https://github.com/ZeroAlloc-Net/ZeroAlloc.Rest/issues/425)
+removes it in release 3.3.1. A build with a constant route, which stands in for 3.3.1, measures 3072 B for the neutral
+call and the bare transport, 4440 B listening, 3528 B for the UTF-8 state and 2832 B for the typed state, and 3248 B
+for the typed call. On 3.3.0 the typed call's 3424 B is above its 3328 B budget, so `TypedEvaluateRoundTrip` and its
+two logger twins fail until Minos adopts 3.3.1. Every gate will be measured again then, and the new budgets set from
+those figures.
 
 ## Comparison
 
