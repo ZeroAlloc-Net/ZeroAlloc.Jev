@@ -13,7 +13,7 @@ public sealed class AddDecisionClientTelemetryTests
         using var capture = new TelemetryCapture();
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(Options("http://default.local/")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
         var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());

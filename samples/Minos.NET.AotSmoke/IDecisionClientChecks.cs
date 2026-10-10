@@ -166,7 +166,7 @@ internal static class IDecisionClientChecks
                 options.ApiKey = "smoke-key";
                 options.BaseAddress = new Uri("https://example.test/api/");
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, responseJson));
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, responseJson));
         provider = services.BuildServiceProvider();
         return provider.GetRequiredService<IDecisionClient>();
     }

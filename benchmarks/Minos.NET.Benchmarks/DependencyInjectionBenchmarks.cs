@@ -29,7 +29,7 @@ public class DependencyInjectionBenchmarks : IDisposable
                 options.ApiKey = "bench";
                 options.BaseAddress = new Uri("https://example.test/api/");
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new ClientBenchmarks.CannedHandler(HttpStatusCode.OK, ClientBenchmarks.NoulResponseJson));
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new ClientBenchmarks.CannedHandler(HttpStatusCode.OK, ClientBenchmarks.NoulResponseJson));
         _provider = services.BuildServiceProvider();
         _resolvedClient = _provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
 

@@ -14,7 +14,7 @@ public sealed class AddDecisionClientEnvironmentTests
         using var environment = new EnvironmentVariables(("TYPESAFE_BASE_URL", "http://env.local/minos"));
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient(options => options.ApiKey = "di-key").ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(options => options.ApiKey = "di-key").HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
         _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());

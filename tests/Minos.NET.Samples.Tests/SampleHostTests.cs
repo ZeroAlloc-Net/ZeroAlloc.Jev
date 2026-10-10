@@ -91,7 +91,7 @@ public sealed class SampleHostTests : IDisposable
                 Path.Combine(_directory, "recordings.json"),
                 Sample,
                 new RecordingSession())
-            .ConfigurePrimaryHttpMessageHandler(() => capture);
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => capture);
         await using var provider = services.BuildServiceProvider();
 
         _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request("Is this urgent?"));

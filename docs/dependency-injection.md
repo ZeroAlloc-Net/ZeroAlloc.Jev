@@ -62,7 +62,7 @@ key comes from configuration, such as user secrets, so it is never written into 
 <!-- snippet: DependencyInjection_Register -->
 ```cs
 // The key is read from configuration, such as user secrets, and never written into the code.
-public static IHttpClientBuilder AddDecision(IHostApplicationBuilder builder)
+public static DecisionClientServiceBuilder AddDecision(IHostApplicationBuilder builder)
 {
     builder.Services.AddSingleton<InboxTriage>();
     return builder.Services.AddDecisionClient(options => options.ApiKey = builder.Configuration["TypeSafe:ApiKey"]);
@@ -71,7 +71,7 @@ public static IHttpClientBuilder AddDecision(IHostApplicationBuilder builder)
 <!-- endSnippet -->
 
 After that, the container builds an `InboxTriage` with the shared client whenever one is needed, and calls
-`TriageAsync` as before. `AddDecisionClient` returns the `IHttpClientBuilder` of the client's `HttpClient`, which is where
+`TriageAsync` as before. `AddDecisionClient` returns a `DecisionClientServiceBuilder`. Its `HttpClient` property is the `IHttpClientBuilder` of the client's `HttpClient`, which is where
 handlers are added. [Below](#the-httpclient-from-the-factory) covers that.
 
 ## The six overloads
@@ -279,7 +279,7 @@ public sealed class TraceHeaderHandler : DelegatingHandler
 
 public static class HandlerRegistration
 {
-    // AddDecisionClient returns the builder of the client's HttpClient, so handlers are added the usual way.
+    // The HttpClient property of the builder AddDecisionClient returns is the client's HttpClient builder, so handlers are added the usual way.
     public static IHttpClientBuilder AddTracedDecision(IServiceCollection services, string apiKey)
     {
         services.AddTransient<TraceHeaderHandler>();

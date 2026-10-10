@@ -32,10 +32,10 @@ public sealed class KeyedDecisionClientTests
         var services = new ServiceCollection();
         services
             .AddDecisionClient(Options("http://default.local/", apiKey: "default-key"))
-            .ConfigurePrimaryHttpMessageHandler(() => defaultHandler);
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => defaultHandler);
         services
             .AddDecisionClient("openrouter", Options("http://keyed.local/api/", apiKey: "keyed-key"))
-            .ConfigurePrimaryHttpMessageHandler(() => keyedHandler);
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => keyedHandler);
         using var provider = services.BuildServiceProvider();
 
         _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
@@ -64,7 +64,7 @@ public sealed class KeyedDecisionClientTests
                 options.Timeout = TimeSpan.FromSeconds(7);
                 options.MaxRetries = 0;
             })
-            .ConfigurePrimaryHttpMessageHandler(() => typesafeHandler);
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => typesafeHandler);
         services
             .AddDecisionClient("openrouter", options =>
             {
@@ -75,7 +75,7 @@ public sealed class KeyedDecisionClientTests
                 options.Timeout = TimeSpan.FromSeconds(9);
                 options.MaxRetries = 0;
             })
-            .ConfigurePrimaryHttpMessageHandler(() => openRouterHandler);
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => openRouterHandler);
         using var provider = services.BuildServiceProvider();
 
         // A built set sends the options' model, so each request shows which options its client read.
@@ -133,7 +133,7 @@ public sealed class KeyedDecisionClientTests
     {
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient("openrouter", Options("http://first.local/", apiKey: "first-key")).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient("openrouter", Options("http://first.local/", apiKey: "first-key")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         services.AddDecisionClient("openrouter", options => options.ApiKey = "second-key");
         services.AddDecisionClient("openrouter");
         using var provider = services.BuildServiceProvider();

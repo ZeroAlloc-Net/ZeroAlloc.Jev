@@ -22,7 +22,7 @@ internal static class DependencyInjectionHarness
                     options.Timeout = perAttempt;
                 }
             })
-            .AddHttpMessageHandler(() => new CountingHandler(attempts));
+            .HttpClient.AddHttpMessageHandler(() => new CountingHandler(attempts));
         return services.BuildServiceProvider();
     }
 
@@ -48,7 +48,7 @@ internal static class DependencyInjectionHarness
         var services = new ServiceCollection();
         services
             .AddDecisionClient(configuration.GetSection("Minos"))
-            .AddHttpMessageHandler(() => new CountingHandler(attempts));
+            .HttpClient.AddHttpMessageHandler(() => new CountingHandler(attempts));
         return services.BuildServiceProvider();
     }
 

@@ -53,7 +53,7 @@ public sealed class AddDecisionClientTests
         var handler = Noul();
         var services = new ServiceCollection();
         services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Debug).AddFakeLogging());
-        services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(Options("http://default.local/")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
         var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
@@ -72,7 +72,7 @@ public sealed class AddDecisionClientTests
         var handler = Noul();
         var services = new ServiceCollection();
         services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Debug).AddFakeLogging());
-        services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler).AddDefaultLogger();
+        services.AddDecisionClient(Options("http://default.local/")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler).AddDefaultLogger();
         using var provider = services.BuildServiceProvider();
 
         _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
@@ -87,7 +87,7 @@ public sealed class AddDecisionClientTests
     {
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(Options("http://default.local/")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
         var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
@@ -106,7 +106,7 @@ public sealed class AddDecisionClientTests
         var services = new ServiceCollection();
         services
             .AddDecisionClient(Options("http://default.local/"))
-            .ConfigurePrimaryHttpMessageHandler(() => handler)
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler)
             .AddHttpMessageHandler(() => new RecordingHandler(seen));
         using var provider = services.BuildServiceProvider();
 
@@ -120,7 +120,7 @@ public sealed class AddDecisionClientTests
     {
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient(Options("http://first.local/", apiKey: "first-key")).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(Options("http://first.local/", apiKey: "first-key")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         services.AddDecisionClient(options => options.ApiKey = "second-key");
         services.AddDecisionClient();
         using var provider = services.BuildServiceProvider();
@@ -154,7 +154,7 @@ public sealed class AddDecisionClientTests
     {
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(Options("http://default.local/")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
         var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
         _ = await client.EvaluateAsync(Request());
@@ -174,7 +174,7 @@ public sealed class AddDecisionClientTests
     public async Task DisposingTheProvider_DisposesTheClient()
     {
         var services = new ServiceCollection();
-        services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => Noul());
+        services.AddDecisionClient(Options("http://default.local/")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => Noul());
         var provider = services.BuildServiceProvider();
         var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
         _ = await client.EvaluateAsync(Request());
@@ -251,7 +251,7 @@ public sealed class AddDecisionClientTests
         var services = new ServiceCollection();
         services
             .AddDecisionClient(Options("http://default.local/"))
-            .ConfigureHttpClient(http => http.BaseAddress = new Uri("http://proxy.local/minos"));
+            .HttpClient.ConfigureHttpClient(http => http.BaseAddress = new Uri("http://proxy.local/minos"));
         using var provider = services.BuildServiceProvider();
 
         var exception = Assert.Throws<ArgumentException>(() => provider.GetRequiredService<IDecisionClient>());
