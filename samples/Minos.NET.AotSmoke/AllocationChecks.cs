@@ -26,7 +26,7 @@ internal static class AllocationChecks
     /// <summary>
     /// <c>AnswerSlots.Noul</c>, <c>Choice</c> and <c>Score</c> over the slots a protocol read from the triage answers.
     /// The slots are a ref struct the protocol owns, so the gate runs inside a hand-written <c>Create</c> that
-    /// <see cref="DecisionClient.EvaluateAsync{T}(string)"/> calls, and counts only the allocations of the accessor loops.
+    /// <see cref="DecisionClientExtensions.EvaluateAsync{T}(IDecisionClient, string)"/> calls, and counts only the allocations of the accessor loops.
     /// </summary>
     public static async Task AnswerSlotAccessors()
     {
@@ -109,7 +109,7 @@ internal static class AllocationChecks
             passDescription: "EvaluateAsync stays within its allocation budget");
     }
 
-    /// <summary><see cref="DecisionClient.EvaluateAsync{T}(string)"/> over a canned handler: the raw, pooled-buffer
+    /// <summary><see cref="DecisionClientExtensions.EvaluateAsync{T}(IDecisionClient, string)"/> over a canned handler: the raw, pooled-buffer
     /// path, through the public API only, since <c>TypedEvaluation</c> and <c>RawJson</c> are internal.</summary>
     public static void TypedEvaluateRoundTrip()
     {
@@ -119,13 +119,12 @@ internal static class AllocationChecks
         };
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
 
-        // Measured 2984 B/call on published win-x64 AOT: the request's Utf8JsonWriter and RawJson, plus
-        // ZeroAlloc.Rest's own per-attempt allocations (HttpRequestMessage, headers, the MemoryStream the body is
-        // copied into, and StreamContent), plus the response's HttpResponseMessage and body buffering, and the
-        // async state machines. There is no SystemOneRequest, SystemOneResponse, Answer or questions dictionary
-        // on this path, which is why it comes in well below EvaluateRoundTrip's 3928 B measurement. It measured
-        // 3368 B/call before ZeroAlloc.Rest 3.2.1 and 3784 B/call when first budgeted in Phase 1.8. Budget: about 10%
-        // headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        // Measured 3248 B/call on published win-x64 AOT through the standard pipeline: the request's Utf8JsonWriter and
+        // RawJson, ZeroAlloc.Rest's own per-attempt allocations (HttpRequestMessage, headers, the MemoryStream the body is
+        // copied into, and StreamContent), the response's HttpResponseMessage and body buffering, the DecisionRequest, the
+        // DecisionResponse with its AnswerSlot[] and probabilities, and the SmokeTriage. It measured 2984 B/call before the
+        // pipeline, 3368 B/call before ZeroAlloc.Rest 3.2.1 and 3784 B/call when first budgeted in Phase 1.8. Budget: about
+        // 10% headroom over the 2984 B measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
             budgetBytes: 3328,
             action: () => client.EvaluateAsync<SmokeTriage>(SmokeAnswers.State),
@@ -133,11 +132,123 @@ internal static class AllocationChecks
             passDescription: "EvaluateAsync<T> stays within its allocation budget");
     }
 
+    /// <summary>The neutral call on the standard pipeline over a canned handler, nothing listening.</summary>
+    public static void NeutralEvaluateRoundTrip()
+    {
+        using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, TriageResponseJson)) { BaseAddress = new Uri("https://example.test/api/") };
+        using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
+        var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
+
+        // Measured 3072 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1: the request's Utf8JsonWriter and
+        // RawJson, ZeroAlloc.Rest's per-attempt HttpRequestMessage, headers, MemoryStream and StreamContent, the
+        // response's HttpResponseMessage and body buffering, and the DecisionResponse with its AnswerSlot[] and
+        // probabilities. The standard stages add nothing on a call that completes synchronously with nothing listening,
+        // so it measures the same as BareTransportRoundTrip, and the {**path} route's endpoint path costs nothing.
+        // Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        GateValueTask(
+            budgetBytes: 3392,
+            action: () => client.EvaluateAsync(request),
+            label: "NeutralEvaluateRoundTrip",
+            passDescription: "EvaluateAsync of a DecisionRequest stays within its allocation budget");
+    }
+
+    /// <summary><see cref="NeutralEvaluateRoundTrip"/> while discarding listeners sample every span and enable every instrument.</summary>
+    public static void NeutralEvaluateRoundTripWhileListening()
+    {
+        using var telemetry = new DiscardingTelemetry();
+        using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, TriageResponseJson)) { BaseAddress = new Uri("https://example.test/api/") };
+        using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
+        var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
+
+        // Measured 4440 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1: NeutralEvaluateRoundTrip's 3072 B plus
+        // the Activity, its boxed start tags, the boxed tag and measurement values and each metric's TagList, 1368 B.
+        // Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        GateValueTask(
+            budgetBytes: 4928,
+            action: () => client.EvaluateAsync(request),
+            label: "NeutralEvaluateRoundTripWhileListening",
+            passDescription: "EvaluateAsync of a DecisionRequest while listening stays within its allocation budget");
+        Program.Check(telemetry.Measurements > 0, "the discarding listeners received measurements, so the neutral call ran the listening path");
+        Program.Check(telemetry.StoppedSpans > 0, "the discarding listeners recorded spans, so the neutral call ran the listening path");
+    }
+
+    /// <summary><see cref="NeutralEvaluateRoundTrip"/> with <see cref="DecisionClientOptions.UseStandardPipeline"/> off: the transport alone.</summary>
+    public static void BareTransportRoundTrip()
+    {
+        using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, TriageResponseJson)) { BaseAddress = new Uri("https://example.test/api/") };
+        using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key", UseStandardPipeline = false });
+        var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
+
+        // Measured 3072 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1, the same as NeutralEvaluateRoundTrip:
+        // the transport's request and response, body buffering and the DecisionResponse, with no stage around it.
+        // Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        GateValueTask(
+            budgetBytes: 3392,
+            action: () => client.EvaluateAsync(request),
+            label: "BareTransportRoundTrip",
+            passDescription: "EvaluateAsync of a DecisionRequest on the bare transport stays within its allocation budget");
+    }
+
+    /// <summary>A <see cref="DelegatingDecisionClient"/> with no overrides over an inner client whose call completes synchronously.</summary>
+    public static void PassThroughStage()
+    {
+        using var stage = new PipelineChecks.PassThroughStage(new FixedResponseClient(PipelineChecks.TriageResponse()));
+        var request = new DecisionRequest(SmokeTriage.Definition, SmokeAnswers.State);
+
+        // Measured 0 B/call on published win-x64 AOT, and budgeted at exactly 0 B: the base class returns the inner
+        // client's completed ValueTask as is, so a stage that adds nothing costs nothing.
+        GateValueTask(
+            budgetBytes: 0,
+            action: () => stage.EvaluateAsync(request),
+            label: "PassThroughStage",
+            passDescription: "a DelegatingDecisionClient that adds nothing allocates nothing");
+    }
+
+    /// <summary><see cref="DecisionClientExtensions.EvaluateUtf8Async{T}(IDecisionClient, ReadOnlyMemory{byte})"/> over a canned handler.</summary>
+    public static void Utf8StateEvaluateRoundTrip()
+    {
+        using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, TriageResponseJson)) { BaseAddress = new Uri("https://example.test/api/") };
+        using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
+        ReadOnlyMemory<byte> state = Encoding.UTF8.GetBytes(SmokeAnswers.JsonState);
+
+        // Measured 3360 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1: TypedEvaluateRoundTrip's request,
+        // transport, DecisionResponse and SmokeTriage, plus the one copy of the caller's bytes the request keeps, 112 B for
+        // this 85 B state, so the caller may reuse its buffer as soon as the call returns. The request writer
+        // copies those bytes into the body as they are and parses nothing. It measured 3704 B/call when the overload
+        // parsed the state into a 280 B JsonDocument. Budget: about 10% headroom over the measurement, rounded up to the
+        // next multiple of 64 B, per the Phase 1.8 rule.
+        GateValueTask(
+            budgetBytes: 3712,
+            action: () => client.EvaluateUtf8Async<SmokeTriage>(state),
+            label: "Utf8StateEvaluateRoundTrip",
+            passDescription: "EvaluateUtf8Async<T> stays within its allocation budget");
+    }
+
+    /// <summary><see cref="DecisionClientExtensions.EvaluateAsync{T, TState}(IDecisionClient, TState, System.Text.Json.Serialization.Metadata.JsonTypeInfo{TState})"/> over a canned handler.</summary>
+    public static void TypedStateEvaluateRoundTrip()
+    {
+        using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, Program.CredentialsResponse)) { BaseAddress = new Uri("https://example.test/api/") };
+        using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
+        var state = new SmokeState("Payouts failing", SmokeAnswers.State);
+
+        // Measured 2840 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.1, over a one-question response: the
+        // transport's request and response, the DecisionResponse, the SmokeStateTriage, and the serialized state, which
+        // the string and JsonElement overloads do not pay: the Utf8JsonWriter and pooled RawJson it is written through,
+        // and the array of its bytes the request keeps. It measured 3008 B/call when the state was a JsonDocument from
+        // DecisionContent.FromValue, which re-wrote a converter's raw JSON. Budget: about 10% headroom over the
+        // measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
+        GateValueTask(
+            budgetBytes: 3136,
+            action: () => client.EvaluateAsync<SmokeStateTriage, SmokeState>(state, SmokeStateJsonContext.Default.SmokeState),
+            label: "TypedStateEvaluateRoundTrip",
+            passDescription: "EvaluateAsync<T, TState> stays within its allocation budget");
+    }
+
     /// <summary><see cref="EvaluateRoundTrip"/> through <see cref="NullLoggerFactory"/>, whose logger has every level disabled.</summary>
     public static void EvaluateRoundTripWithNullLoggerFactory()
     {
         // Budget: EvaluateRoundTrip's own, 4352 B, unchanged. With no level enabled the client takes the unlogged path:
-        // no logging wrapper and no LoggingDecisionApi state machine, so nothing may be added.
+        // no logging stage and no logging state machine, so nothing may be added.
         EvaluateRoundTripThrough(
             NullLoggerFactory.Instance,
             budgetBytes: 4352,
@@ -175,7 +286,7 @@ internal static class AllocationChecks
         // so the enabled logger adds nothing on the synchronous path the canned handler takes: each event's state is a
         // struct handed to a logger that discards it, the timing is two Stopwatch timestamps, and no state machine is
         // boxed while a call completes synchronously. A call that completes asynchronously also allocates the
-        // LoggingDecisionApi and LogEvaluationAsync state machines, which this gate cannot see. Budget: about 10% headroom
+        // logging state machines, which this gate cannot see. Budget: about 10% headroom
         // over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         EvaluateRoundTripThrough(
             DiscardingLoggerFactory.Instance,
@@ -192,11 +303,11 @@ internal static class AllocationChecks
     {
         var callsBefore = DiscardingLoggerFactory.Calls;
 
-        // Measured 2984 B/call on published win-x64 AOT, the same as TypedEvaluateRoundTrip's current measurement and its unlogged twin in this run,
+        // Measured 3248 B/call on published win-x64 AOT, the same as TypedEvaluateRoundTrip's current measurement and its unlogged twin in this run,
         // so the enabled logger adds nothing on the synchronous path the canned handler takes: each event's state is a
         // struct handed to a logger that discards it, the timing is two Stopwatch timestamps, and no state machine is
         // boxed while a call completes synchronously. A call that completes asynchronously also allocates the
-        // LoggingDecisionApi and LogEvaluationAsync state machines, which this gate cannot see. Budget: about 10% headroom
+        // logging state machines, which this gate cannot see. Budget: about 10% headroom
         // over the measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         TypedEvaluateRoundTripThrough(
             DiscardingLoggerFactory.Instance,
@@ -375,7 +486,7 @@ internal static class AllocationChecks
             passDescription: "QuestionSetBuilder.Build stays within its allocation budget");
     }
 
-    /// <summary><see cref="DecisionClient.EvaluateAsync(QuestionSet, DecisionContent)"/> over a canned handler.</summary>
+    /// <summary><see cref="DecisionClientExtensions.EvaluateAsync(IDecisionClient, QuestionSet, DecisionContent)"/> over a canned handler.</summary>
     public static void EvaluateBuiltSetRoundTrip()
     {
         using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, SmokeBuiltSet.ResponseJson))
@@ -385,9 +496,10 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var set = SmokeBuiltSet.Full(out _, out _, out _, out _);
 
-        // Measured 3272 B/call on published win-x64 AOT: the QuestionSet's pre-built request body copied into a pooled
-        // buffer, HttpClient's request and response objects and body buffering, the Answers result and the async state
-        // machines if the call does not complete synchronously. It measured 3656 B/call before ZeroAlloc.Rest 3.2.1 and
+        // Measured 3440 B/call on published win-x64 AOT through the standard pipeline: the QuestionSet's pre-built request
+        // body copied into a pooled buffer, HttpClient's request and response objects and body buffering, the
+        // DecisionRequest, the DecisionResponse with its AnswerSlot[] and the Answers result. It measured 3272 B/call
+        // before the pipeline, 3656 B/call before ZeroAlloc.Rest 3.2.1 and
         // 4288 B/call when first budgeted in Phase 2.4. Budget: about 10% headroom over the measurement, rounded up to
         // the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
@@ -523,7 +635,7 @@ internal static class AllocationChecks
         var services = new ServiceCollection();
         DependencyInjectionChecks.RegisterDefaultClient(services);
         using var provider = services.BuildServiceProvider();
-        var resolved = provider.GetRequiredService<IDecisionClient>();
+        var resolved = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
 
         // The same canned body as RegisterDefaultClient's handler, so both sides of the comparison parse one response.
         using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
@@ -558,7 +670,7 @@ internal static class AllocationChecks
         var services = new ServiceCollection();
         DependencyInjectionChecks.RegisterBoundDefaultClient(services);
         using var provider = services.BuildServiceProvider();
-        var resolved = provider.GetRequiredService<IDecisionClient>();
+        var resolved = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
 
         // The bound section's base address and key, and the same canned body, so both sides make the same call.
         using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
@@ -602,9 +714,8 @@ internal static class AllocationChecks
         using var http = new HttpClient(new CannedHandler(HttpStatusCode.OK, TriageResponseJson)) { BaseAddress = new Uri("https://example.test/api/") };
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
 
-        // Measured 4544 B/call on published win-x64 AOT. The call pays TypedEvaluateRoundTrip's bytes plus the span, tags
-        // and measurements, and the deferred reads, which allocate only the response model's string, once per attribute
-        // that reads it. Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the
+        // Measured 4616 B/call on published win-x64 AOT, 4544 B/call before the pipeline. The call pays
+        // TypedEvaluateRoundTrip's bytes plus the span, tags and measurements. Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per the
         // Phase 1.8 rule.
         GateValueTask(
             budgetBytes: 5056,
@@ -623,7 +734,8 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var set = SmokeBuiltSet.Full(out _, out _, out _, out _);
 
-        // Measured 4832 B/call on published win-x64 AOT. The call pays EvaluateBuiltSetRoundTrip's bytes plus the span,
+        // Measured 4808 B/call on published win-x64 AOT, 4832 B/call before the pipeline. The call pays
+        // EvaluateBuiltSetRoundTrip's bytes plus the span,
         // tags and measurements. Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B,
         // per the Phase 1.8 rule.
         GateValueTask(
@@ -637,16 +749,18 @@ internal static class AllocationChecks
 
     /// <summary>
     /// A typed evaluation that completes asynchronously, with nothing listening: the one place telemetry adds bytes when
-    /// off, the unwrap's state machine. The canned-handler gates complete synchronously and cannot see it.
+    /// off, the stages' state machines. The canned-handler gates complete synchronously and cannot see it.
+    /// It replaced OperationsCostTests' in-process unwrap check, so <c>dotnet test</c> has no counterpart.
     /// </summary>
     public static async Task TelemetryOffAsynchronousTypedEvaluation()
     {
         var median = await MedianYieldingAsync(TriageResponseJson, null, static client => client.EvaluateAsync<SmokeTriage>("Help!")).ConfigureAwait(false);
         Console.WriteLine($"     yielding EvaluateAsync<T> B/call with telemetry off: {median}");
 
-        // Measured 4184 B/call, the median of five runs, on published win-x64 AOT. This is the whole asynchronously
-        // completing call, not only the unwrap: the transport's request and response, body buffering, parsing and every
-        // boxed async state machine, among them the unwrap's. Budget: about 10% headroom over the measurement, rounded up
+        // Measured 4389 B/call, the median of five runs, on published win-x64 AOT, 4184 B/call before the pipeline. This is
+        // the whole asynchronously completing call: the transport's request and response, body buffering, parsing, the
+        // DecisionRequest and DecisionResponse, and every boxed async state machine, among them the retry stage's and the
+        // typed extension's. Budget: about 10% headroom over the measurement, rounded up
         // to the next multiple of 64 B, per the Phase 1.8 rule.
         const long BudgetBytes = 4608;
         Program.Check(

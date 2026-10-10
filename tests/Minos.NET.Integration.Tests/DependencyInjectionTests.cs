@@ -40,7 +40,7 @@ public sealed class DependencyInjectionTests : IClassFixture<WireMockFixture>
         var attempts = new DependencyInjectionHarness.AttemptCount();
         using var provider = DependencyInjectionHarness.Provider(_fixture, attempts, timeout: null);
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Fixtures.NoulRequest());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Fixtures.NoulRequest());
 
         Assert.True(result.IsSuccess);
         Assert.Equal(0.95, Assert.IsType<NoulAnswer>(result.Value.Answers["is_urgent"]).Noul, 3);
@@ -56,7 +56,7 @@ public sealed class DependencyInjectionTests : IClassFixture<WireMockFixture>
         var attempts = new DependencyInjectionHarness.AttemptCount();
         using var provider = DependencyInjectionHarness.BoundProvider(_fixture, attempts, maxRetries: 3, timeout: null);
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Fixtures.NoulRequest());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Fixtures.NoulRequest());
 
         Assert.True(result.IsFailure);
         Assert.Equal(503, result.Error.StatusCode);

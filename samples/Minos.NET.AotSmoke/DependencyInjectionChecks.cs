@@ -16,10 +16,10 @@ internal static class DependencyInjectionChecks
                 options.ApiKey = "smoke-key";
                 options.BaseAddress = new Uri("https://example.test/api/");
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
 
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Minos.DecisionClientOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Minos.DecisionClientOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<Minos.DecisionClientOptions!>! configure) -> Minos.DecisionClientServiceBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, System.Action<Minos.DecisionClientOptions!>! configure) -> Minos.DecisionClientServiceBuilder!")]
     public static async Task DefaultAndKeyedClientsEvaluate()
     {
         var services = new ServiceCollection();
@@ -31,11 +31,11 @@ internal static class DependencyInjectionChecks
                 options.ApiKey = "smoke-openrouter-key";
                 options.BaseAddress = new Uri("https://openrouter.example.test/api/");
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
         using var provider = services.BuildServiceProvider();
 
-        var client = provider.GetRequiredService<IDecisionClient>();
-        var keyed = provider.GetRequiredKeyedService<IDecisionClient>("openrouter");
+        var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
+        var keyed = provider.GetRequiredKeyedService<IDecisionClient>("openrouter").GetService<DecisionClient>()!;
         var result = await client.EvaluateAsync(Program.Request()).ConfigureAwait(false);
         var keyedResult = await keyed.EvaluateAsync(Program.Request()).ConfigureAwait(false);
 
@@ -70,17 +70,17 @@ internal static class DependencyInjectionChecks
     public static void RegisterBoundDefaultClient(IServiceCollection services)
         => services
             .AddDecisionClient(BoundConfiguration().GetSection("Minos"))
-            .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
 
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Minos.DecisionClientServiceBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name, Microsoft.Extensions.Configuration.IConfiguration! configuration) -> Minos.DecisionClientServiceBuilder!")]
     public static async Task ClientsBoundFromConfigurationEvaluate()
     {
         var services = new ServiceCollection();
         RegisterBoundDefaultClient(services);
         services
             .AddDecisionClient("openrouter", BoundConfiguration().GetSection("OpenRouter"))
-            .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
         using var provider = services.BuildServiceProvider();
         var monitor = provider.GetRequiredService<IOptionsMonitor<DecisionClientOptions>>();
         var defaults = monitor.Get(Options.DefaultName);
@@ -97,27 +97,27 @@ internal static class DependencyInjectionChecks
             keyed is { Provider: DecisionProvider.OpenRouter, ApiKey: "smoke-openrouter-key", Model: "jev-1.13.0" },
             "AddDecisionClient binds a keyed client's own section under Native AOT");
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Program.Request()).ConfigureAwait(false);
-        var keyedResult = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter")
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Program.Request()).ConfigureAwait(false);
+        var keyedResult = await provider.GetRequiredKeyedService<IDecisionClient>("openrouter").GetService<DecisionClient>()!
             .EvaluateAsync(Program.Request()).ConfigureAwait(false);
         Program.Check(
             result.IsSuccess && keyedResult.IsSuccess,
             "the default and the keyed client bound from configuration each evaluate under Native AOT");
     }
 
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
-    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name) -> Microsoft.Extensions.DependencyInjection.IHttpClientBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Minos.DecisionClientServiceBuilder!")]
+    [Covers("static Microsoft.Extensions.DependencyInjection.DecisionServiceCollectionExtensions.AddDecisionClient(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! name) -> Minos.DecisionClientServiceBuilder!")]
     public static async Task ClientsConfiguredFromTheEnvironmentEvaluate()
     {
         using (SmokeAssert.TypeSafeEnvironment())
         {
             var services = new ServiceCollection();
-            services.AddDecisionClient().ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
-            services.AddDecisionClient("secondary").ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
+            services.AddDecisionClient().HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
+            services.AddDecisionClient("secondary").HttpClient.ConfigurePrimaryHttpMessageHandler(() => new CannedHandler(HttpStatusCode.OK, Program.NoulResponse));
             using var provider = services.BuildServiceProvider();
 
-            var client = provider.GetRequiredService<IDecisionClient>();
-            var keyed = provider.GetRequiredKeyedService<IDecisionClient>("secondary");
+            var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
+            var keyed = provider.GetRequiredKeyedService<IDecisionClient>("secondary").GetService<DecisionClient>()!;
             var result = await client.EvaluateAsync(Program.Request()).ConfigureAwait(false);
             var keyedResult = await keyed.EvaluateAsync(Program.Request()).ConfigureAwait(false);
 

@@ -77,6 +77,18 @@ public sealed class DecisionClientOptions
     public bool Jitter { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the client runs its standard pipeline: telemetry, then logging when it has a logger factory,
+    /// then retries. <see langword="false"/> leaves the bare transport, one attempt per call, to wrap with
+    /// <see cref="DecisionClientBuilder"/>. Defaults to <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// It applies to the raw <see cref="DecisionClient.EvaluateAsync(SystemOneRequest, CancellationToken)"/> and
+    /// <see cref="DecisionClient.ListModelsAsync(CancellationToken)"/> calls too: with <see langword="false"/> they send one
+    /// attempt each and are not retried. They keep their own span and log either way.
+    /// </remarks>
+    public bool UseStandardPipeline { get; set; } = true;
+
+    /// <summary>
     /// Checks these options exactly as a <see cref="DecisionClient"/> constructor does, including the API key and base address
     /// environment variables, and throws what the constructor would throw. It creates no client and changes no option.
     /// </summary>

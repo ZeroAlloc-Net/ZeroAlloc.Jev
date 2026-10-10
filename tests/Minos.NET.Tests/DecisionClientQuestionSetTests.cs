@@ -6,7 +6,7 @@ using static Minos.Tests.ClientTestKit;
 
 namespace Minos.Tests;
 
-/// <summary>A built set evaluates the same through the default interface methods and through DecisionClient's pooled path.</summary>
+/// <summary>A built set evaluates the same through <see cref="DecisionClientExtensions"/> and through DecisionClient's pooled path.</summary>
 public sealed class DecisionClientQuestionSetTests : IDisposable
 {
     private const string ResponseJson = """{"model":"jev-1.13.0","answers":{"is_urgent":{"type":"noul","noul":0.95},"department":{"type":"choice","choice":"technical","probabilities":{"billing":0.1,"technical":0.8,"sales":0.1},"confidence":0.8},"product":{"type":"choice","choice":"pro-plan","probabilities":{"pro-plan":0.6,"team-plan":0.4},"confidence":0.6},"effort":{"type":"score","score":1.2,"legend":{"0":"Minutes","1":"Hours","2":"Days"},"probabilities":{"0":0.1,"1":0.6,"2":0.3},"confidence":0.7}},"usage":{"input_tokens":10,"output_tokens":5}}""";
@@ -38,7 +38,7 @@ public sealed class DecisionClientQuestionSetTests : IDisposable
         var handler = StubHandler.Json(HttpStatusCode.OK, ResponseJson);
         var pool = new CountingPool();
         using var client = Client(handler, pool);
-        IDecisionClient fake = new CapturingClient(ResponseJson);
+        IDecisionClient fake = new CapturingClient(responseJson: ResponseJson);
 
         Assert.Equal("questionSet", ThrowsSynchronously<ArgumentNullException>(() => client.EvaluateAsync((QuestionSet)null!, "x").AsTask()).ParamName);
         Assert.Equal("state", ThrowsSynchronously<ArgumentException>(() => client.EvaluateAsync(set, default(DecisionContent)).AsTask()).ParamName);
@@ -92,10 +92,10 @@ public sealed class DecisionClientQuestionSetTests : IDisposable
     }
 
     [Fact]
-    public async Task DefaultPath_MissingAnswer_IsInvalidResponse()
+    public async Task ExtensionPath_MissingAnswer_IsInvalidResponse()
     {
         var set = Set(out _, out _, out _, out _);
-        IDecisionClient fake = new CapturingClient();
+        IDecisionClient fake = new CapturingClient(responseJson: Fixture.Text("response-noul.json"));
 
         var result = await fake.EvaluateAsync(set, "x");
 
@@ -157,12 +157,13 @@ public sealed class DecisionClientQuestionSetTests : IDisposable
     private async Task AssertBothPathsAgree(DecisionContent state)
     {
         var set = Set(out var urgent, out var department, out var product, out var effort);
-        var fake = new CapturingClient(ResponseJson);
+        var fake = new CapturingClient(responseJson: ResponseJson);
 
         var viaDefault = await ((IDecisionClient)fake).EvaluateAsync(set, state);
-        var expected = JsonNode.Parse(JsonSerializer.Serialize(fake.OnlyRequest(), DecisionJsonContext.Default.SystemOneRequest))!;
-        Assert.Equal(DecisionDefaults.Model, expected["model"]!.GetValue<string>());
-        expected["model"] = TestModel;
+        var captured = fake.OnlyRequest();
+        Assert.Same(set.Definition, captured.Definition);
+        Assert.Null(captured.Model);
+        var expected = ExpectedBody(captured);
 
         var handler = StubHandler.Json(HttpStatusCode.OK, ResponseJson);
         var pool = new CountingPool();

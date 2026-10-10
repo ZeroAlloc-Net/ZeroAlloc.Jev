@@ -13,10 +13,10 @@ public sealed class AddDecisionClientTelemetryTests
         using var capture = new TelemetryCapture();
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient(Options("http://default.local/")).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(Options("http://default.local/")).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.True(result.IsSuccess);
         Assert.Equal("evaluate", capture.StartTags().Tag("minos.operation"));

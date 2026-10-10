@@ -265,6 +265,61 @@ public sealed class DecisionContentTests
     public void EnsureSingleJsonValue_AcceptsOneValue(string json)
         => DecisionContent.EnsureSingleJsonValue(Encoding.UTF8.GetBytes(json), "arg");
 
+    // EvaluateUtf8Async keeps a copy of the caller's bytes so they are sent unchanged; every public member still behaves
+    // as it does for the content FromUtf8Json makes of the same bytes.
+    public static TheoryData<string> Utf8States => [" { \"a\" : [1, \"é\"] } ", "[1,2]", "  \"plain \\u00e9 text\"  ", "{}"];
+
+    [Theory]
+    [MemberData(nameof(Utf8States))]
+    public void Utf8State_BehavesAsFromUtf8Json(string json)
+    {
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var expected = DecisionContent.FromUtf8Json(bytes);
+        var padded = new byte[bytes.Length + 4];
+        bytes.CopyTo(padded, 2);
+
+        // A whole array and a slice of a larger one are both copied, and only the state's bytes are kept.
+        var states = new[] { DecisionContent.FromCheckedUtf8State(bytes), DecisionContent.FromCheckedUtf8State(padded.AsSpan(2, bytes.Length)) };
+        Array.Clear(bytes);
+        Array.Clear(padded);
+        foreach (var state in states)
+        {
+            Assert.True(state.TryGetUtf8State(out var utf8));
+            Assert.Equal(json, Encoding.UTF8.GetString(utf8));
+            Assert.Equal(expected.IsString, state.IsString);
+            Assert.Equal(expected.TryGetString(out var expectedText), state.TryGetString(out var text));
+            Assert.Equal(expectedText, text);
+            Assert.Equal(expected.TryGetJson(out var expectedJson), state.TryGetJson(out var stateJson));
+            Assert.Equal(expectedJson.ValueKind, stateJson.ValueKind);
+            Assert.True(expectedJson.ValueKind == JsonValueKind.Undefined || JsonElement.DeepEquals(expectedJson, stateJson));
+            Assert.Equal(expected.ToString(), state.ToString());
+            Assert.Equal(expected.GetHashCode(), state.GetHashCode());
+            Assert.True(state.Equals(expected));
+            Assert.True(expected.Equals(state));
+            Assert.True(state == expected);
+            Assert.True(state.Equals((object)expected));
+            Assert.Equal(Write(expected), Write(state));
+            DecisionContent.EnsureInitialized(state, "state");
+        }
+    }
+
+    [Fact]
+    public void Utf8State_DiffersFromOtherContent()
+    {
+        Assert.NotEqual(DecisionContent.FromUtf8Json("[2]"u8), DecisionContent.FromCheckedUtf8State("[1]"u8.ToArray()));
+        Assert.NotEqual(DecisionContent.FromString("[1]"), DecisionContent.FromCheckedUtf8State("[1]"u8.ToArray()));
+        Assert.Equal(DecisionContent.FromString("a"), DecisionContent.FromCheckedUtf8State("\"a\""u8.ToArray()));
+        Assert.NotEqual(default, DecisionContent.FromCheckedUtf8State("{}"u8.ToArray()));
+    }
+
+    [Fact]
+    public void OtherContent_HasNoUtf8State()
+    {
+        Assert.False(DecisionContent.FromString("{}").TryGetUtf8State(out _));
+        Assert.False(DecisionContent.FromUtf8Json("{}"u8).TryGetUtf8State(out _));
+        Assert.False(default(DecisionContent).TryGetUtf8State(out _));
+    }
+
     private static string Write(DecisionContent value)
     {
         var buffer = new ArrayBufferWriter<byte>();

@@ -7,8 +7,7 @@ namespace Minos.Protocols;
 /// <summary>
 /// Writes a <c>/v1/systemone</c> request body straight into a pooled <see cref="RawJson"/>: the state, the model and the
 /// protocol's cached <c>questions</c> bytes for a definition, without building a <see cref="SystemOneRequest"/>. The body
-/// is JSON-equal to the one <see cref="TypedEvaluation.CreateRequest(ReadOnlySpan{byte}, DecisionContent, string, string)"/>
-/// serializes to for the same questions, state and model.
+/// is JSON-equal to a <see cref="SystemOneRequest"/> with the same questions, state and model, serialized.
 /// </summary>
 internal static class SystemOneRequestWriter
 {

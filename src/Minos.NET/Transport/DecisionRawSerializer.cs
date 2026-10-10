@@ -4,7 +4,7 @@ using ZeroAlloc.Rest;
 namespace Minos.Transport;
 
 /// <summary>
-/// The serializer for <see cref="IDecisionApi.EvaluateRawAsync"/>: it passes <see cref="RawJson"/> bodies through as bytes,
+/// The serializer for <see cref="IDecisionApi.SendAsync"/>: it passes <see cref="RawJson"/> bodies through as bytes,
 /// without parsing them or building an object model.
 /// </summary>
 internal sealed class DecisionRawSerializer : IRestSerializer

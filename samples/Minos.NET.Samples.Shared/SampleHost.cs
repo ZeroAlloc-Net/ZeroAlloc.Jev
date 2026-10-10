@@ -12,7 +12,7 @@ public static class SampleHost
     /// <paramref name="recordingsPath"/> is read in replay only, so a live run may pass <see langword="null"/>.
     /// </summary>
     /// <exception cref="ArgumentException">Replay is asked for without a recordings path.</exception>
-    public static IHttpClientBuilder AddSampleDecisionClient(
+    public static DecisionClientServiceBuilder AddSampleDecisionClient(
         this IServiceCollection services,
         IConfiguration clientSection,
         SampleMode mode,
@@ -26,10 +26,10 @@ public static class SampleHost
             case SampleMode.Replay:
                 ArgumentException.ThrowIfNullOrEmpty(recordingsPath);
                 services.AddDecisionClient(options => options.ApiKey ??= "replay-no-key");
-                builder.ConfigurePrimaryHttpMessageHandler(() => new ReplayHandler(RecordingsFile.Load(recordingsPath), sampleName));
+                builder.HttpClient.ConfigurePrimaryHttpMessageHandler(() => new ReplayHandler(RecordingsFile.Load(recordingsPath), sampleName));
                 break;
             case SampleMode.Record:
-                builder.AddHttpMessageHandler(() => new RecordingHandler(session));
+                builder.HttpClient.AddHttpMessageHandler(() => new RecordingHandler(session));
                 break;
         }
 

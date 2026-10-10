@@ -201,7 +201,7 @@ public sealed class DecisionClientLoggingTests : IDisposable
     }
 
     [Fact]
-    public async Task EveryTypedOverload_LogsEvaluateTyped()
+    public async Task EveryTypedOverload_LogsEvaluateSet()
     {
         using var logs = new LogCapture();
         using var client = Client(StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json")), logs.Factory);
@@ -215,8 +215,9 @@ public sealed class DecisionClientLoggingTests : IDisposable
         Assert.Equal([1001, 1001, 1001, 1001], logs.EventIds);
         Assert.All(logs.Records, record =>
         {
-            Assert.Equal(DecisionLog.EvaluateTyped, LogAssert.Field(record, "Operation"));
+            Assert.Equal(DecisionLog.EvaluateSet, LogAssert.Field(record, "Operation"));
             Assert.Equal(ClientTestKit.TestModel, LogAssert.Field(record, "Model"));
+            Assert.Equal("typesafe", LogAssert.Field(record, "Provider"));
             Assert.Equal("1", LogAssert.Field(record, "QuestionCount"));
         });
     }
@@ -231,14 +232,14 @@ public sealed class DecisionClientLoggingTests : IDisposable
 
         Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
         var record = logs.Only(1002);
-        Assert.Equal(DecisionLog.EvaluateTyped, LogAssert.Field(record, "Operation"));
+        Assert.Equal(DecisionLog.EvaluateSet, LogAssert.Field(record, "Operation"));
         Assert.Equal("InvalidResponse", LogAssert.Field(record, "ErrorKind"));
         Assert.Equal("200", LogAssert.Field(record, "StatusCode"));
         Assert.Equal(DecisionLog.UnreadableResponse, LogAssert.Field(record, "ErrorMessage"));
     }
 
     [Fact]
-    public async Task BuiltSet_LogsEvaluateBuiltSet_WithItsQuestionCount()
+    public async Task BuiltSet_LogsEvaluateSet_WithItsQuestionCount()
     {
         const string response = """{"model":"m","answers":{"is_urgent":{"type":"noul","noul":0.9},"is_angry":{"type":"noul","noul":0.2}},"usage":{"input_tokens":1,"output_tokens":1}}""";
         using var logs = new LogCapture();
@@ -252,7 +253,7 @@ public sealed class DecisionClientLoggingTests : IDisposable
         Assert.True((await client.EvaluateAsync(set, "Help!")).IsSuccess);
 
         var record = logs.Only(1001);
-        Assert.Equal(DecisionLog.EvaluateBuiltSet, LogAssert.Field(record, "Operation"));
+        Assert.Equal(DecisionLog.EvaluateSet, LogAssert.Field(record, "Operation"));
         Assert.Equal("2", LogAssert.Field(record, "QuestionCount"));
     }
 
@@ -267,7 +268,7 @@ public sealed class DecisionClientLoggingTests : IDisposable
         Assert.Equal(DecisionErrorKind.Validation, result.Error.Kind);
         var record = logs.Only(1002);
         Assert.Equal(LogLevel.Warning, record.Level);
-        Assert.Equal(DecisionLog.EvaluateBuiltSet, LogAssert.Field(record, "Operation"));
+        Assert.Equal(DecisionLog.EvaluateSet, LogAssert.Field(record, "Operation"));
         Assert.Equal(ClientTestKit.TestModel, LogAssert.Field(record, "Model"));
         Assert.Equal("Validation", LogAssert.Field(record, "ErrorKind"));
         Assert.Equal("422", LogAssert.Field(record, "StatusCode"));

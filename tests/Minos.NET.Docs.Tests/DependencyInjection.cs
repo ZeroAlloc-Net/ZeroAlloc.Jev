@@ -35,7 +35,7 @@ public static class DecisionRegistration
 {
     #region DependencyInjection_Register
     // The key is read from configuration, such as user secrets, and never written into the code.
-    public static IHttpClientBuilder AddDecision(IHostApplicationBuilder builder)
+    public static DecisionClientServiceBuilder AddDecision(IHostApplicationBuilder builder)
     {
         builder.Services.AddSingleton<InboxTriage>();
         return builder.Services.AddDecisionClient(options => options.ApiKey = builder.Configuration["TypeSafe:ApiKey"]);
@@ -124,13 +124,14 @@ public sealed class TraceHeaderHandler : DelegatingHandler
 
 public static class HandlerRegistration
 {
-    // AddDecisionClient returns the builder of the client's HttpClient, so handlers are added the usual way.
+    // The HttpClient property of the builder AddDecisionClient returns is the client's HttpClient builder, so handlers
+    // are added the usual way.
     public static IHttpClientBuilder AddTracedDecision(IServiceCollection services, string apiKey)
     {
         services.AddTransient<TraceHeaderHandler>();
         return services
             .AddDecisionClient(options => options.ApiKey = apiKey)
-            .AddHttpMessageHandler<TraceHeaderHandler>();
+            .HttpClient.AddHttpMessageHandler<TraceHeaderHandler>();
     }
 
     // ConfigureHttpClientDefaults adds a handler to every HttpClient the factory makes, the Minos clients included.
@@ -149,7 +150,7 @@ public static class HandlerRegistration
         services.ConfigureHttpClientDefaults(defaults => defaults.AddHttpMessageHandler<TraceHeaderHandler>());
         return services
             .AddDecisionClient(options => options.ApiKey = apiKey)
-            .ConfigureAdditionalHttpMessageHandlers((handlers, _) => handlers.Clear());
+            .HttpClient.ConfigureAdditionalHttpMessageHandlers((handlers, _) => handlers.Clear());
     }
 
     // When a handler of yours retries, such as a standard resilience handler, turn the client's own retries off,

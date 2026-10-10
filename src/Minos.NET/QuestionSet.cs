@@ -1,26 +1,18 @@
-using System.Text.Json;
-using Minos.Protocols;
-
 namespace Minos;
 
 /// <summary>
 /// A question set built at run time with <see cref="QuestionSetBuilder"/>: the counterpart of a <c>[Questions]</c>
 /// type, for questions, options or keys known only at run time. Evaluate it with
-/// <c>IDecisionClient.EvaluateAsync(QuestionSet, DecisionContent)</c>.
+/// <see cref="DecisionClientExtensions.EvaluateAsync(IDecisionClient, QuestionSet, DecisionContent)"/>.
 /// </summary>
 /// <remarks>Immutable and safe to share across threads: build it once and reuse it.</remarks>
 public sealed class QuestionSet
 {
-    private readonly AnswerParser<Answers> _parser;
-    private readonly AnswerFactory<Answers> _create;
-
     internal QuestionSet(
         object identity, QuestionSetDefinition definition, QuestionFailure[] warnings, object?[] optionSets)
     {
         Identity = identity;
         Definition = definition;
-        _create = answers => new Answers(this, answers.Probabilities, answers.HeapSlots ?? answers.Slots.ToArray());
-        _parser = (ref Utf8JsonReader answers) => SystemOneProtocol.Instance.ReadAnswers(ref answers, Definition, _create);
         Warnings = warnings.Length == 0 ? [] : new System.Collections.ObjectModel.ReadOnlyCollection<QuestionFailure>(warnings);
         OptionSets = optionSets;
     }
@@ -43,7 +35,4 @@ public sealed class QuestionSet
     /// <summary>Starts a new set.</summary>
     /// <returns>An empty builder.</returns>
     public static QuestionSetBuilder CreateBuilder() => new();
-
-    /// <summary>Gets this set's parser, created once. It reads through the protocol; unknown keys are skipped, as a generated set skips them.</summary>
-    internal AnswerParser<Answers> Parser => _parser;
 }

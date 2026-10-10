@@ -1,208 +1,25 @@
-using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using ZeroAlloc.Results;
 
 namespace Minos;
 
-/// <summary>Calls TypeSafe's Jev System One API. Implemented by <see cref="DecisionClient"/>; mock it in tests.</summary>
+/// <summary>Asks a decision provider a question set's questions about a state. <see cref="DecisionClient"/> implements it over HTTP; stages derive from <see cref="DelegatingDecisionClient"/>.</summary>
 /// <remarks>
-/// <para>
-/// A hand-written fake implements <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> and
-/// <see cref="ListModelsAsync(CancellationToken)"/>; the typed <c>EvaluateAsync&lt;T&gt;</c> overloads and the built-set
-/// overloads then work through it. Mocking libraries intercept default interface methods; configure the overload you
-/// call, or enable CallBase.
-/// </para>
-/// <para>
-/// After <see cref="DecisionClient.Dispose"/>, a <see cref="DecisionClient"/> call throws <see cref="ObjectDisposedException"/>,
-/// and a disposed client never retries: a retry that would start after the disposal is not sent, and the call returns
-/// a <see cref="DecisionErrorKind.Disposed"/> failure. A call whose request the disposal tore down, which happens only over
-/// an <see cref="HttpClient"/> the client created, returns <see cref="DecisionErrorKind.Disposed"/> too. Over a borrowed
-/// <see cref="HttpClient"/>, the attempt already in flight is not torn down and keeps its own result.
-/// </para>
+/// The typed <c>EvaluateAsync&lt;T&gt;</c> calls and the <see cref="QuestionSet"/> calls are extension methods in
+/// <see cref="DecisionClientExtensions"/>, so they work over any implementation, a test fake included. A fake implements
+/// <see cref="EvaluateAsync"/>, returning a <see cref="DecisionResponse"/> built with its public constructor, and
+/// <see cref="GetService"/>.
 /// </remarks>
-public interface IDecisionClient
+public interface IDecisionClient : IDisposable
 {
-    /// <summary>Asks Jev the request's questions about its state.</summary>
-    /// <param name="request">The state, the questions and the model.</param>
+    /// <summary>Asks the request's questions about its state.</summary>
+    /// <param name="request">The questions, the state and, optionally, the model.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
     /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
-    /// <remarks>Calls <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> without cancellation.</remarks>
-    ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request)
-        => EvaluateAsync(request, CancellationToken.None);
+    ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default);
 
-    /// <summary>Asks Jev the request's questions about its state.</summary>
-    /// <param name="request">The state, the questions and the model.</param>
-    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
-    /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
-    ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request, CancellationToken cancellationToken);
-
-    /// <summary>Lists the models and aliases available to the account. TypeSafe's API only.</summary>
-    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
-    /// <returns>The models, or the <see cref="DecisionError"/> that prevented them; <see cref="DecisionErrorKind.Unsupported"/> on OpenRouter.</returns>
-    ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>Asks <typeparamref name="T"/>'s questions about a text state and returns its typed answers.</summary>
-    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
-    /// <param name="state">The text to evaluate.</param>
-    /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
-    /// <remarks>Calls <see cref="EvaluateAsync{T}(string, CancellationToken)"/> without cancellation.</remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="state"/> is <see langword="null"/>.</exception>
-    ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(string state)
-        where T : IQuestionSet<T>
-        => EvaluateAsync<T>(state, CancellationToken.None);
-
-    /// <summary>Asks <typeparamref name="T"/>'s questions about a text state and returns its typed answers.</summary>
-    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
-    /// <param name="state">The text to evaluate.</param>
-    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
-    /// <returns>
-    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
-    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
-    /// </returns>
-    /// <remarks>
-    /// This default implementation is the compatible, allocating path: it calls
-    /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> with <see cref="DecisionDefaults.Model"/> and reads
-    /// the typed answers from the untyped response. <see cref="DecisionClient"/> overrides it.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="state"/> is <see langword="null"/>.</exception>
-    ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(string state, CancellationToken cancellationToken)
-        where T : IQuestionSet<T>
-    {
-        ArgumentNullException.ThrowIfNull(state);
-        return TypedEvaluation.EvaluateAsync<T>(this, DecisionContent.FromString(state), cancellationToken);
-    }
-
-    /// <summary>Asks <typeparamref name="T"/>'s questions about a JSON state and returns its typed answers.</summary>
-    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
-    /// <param name="state">The state: a JSON string is sent as text; an object or array as structured content.</param>
-    /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
-    /// <remarks>Calls <see cref="EvaluateAsync{T}(JsonElement, CancellationToken)"/> without cancellation.</remarks>
-    /// <exception cref="ArgumentException"><paramref name="state"/> is not a string, object or array.</exception>
-    ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(JsonElement state)
-        where T : IQuestionSet<T>
-        => EvaluateAsync<T>(state, CancellationToken.None);
-
-    /// <summary>Asks <typeparamref name="T"/>'s questions about a JSON state and returns its typed answers.</summary>
-    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
-    /// <param name="state">The state: a JSON string is sent as text; an object or array, such as records or a chat log, as structured content.</param>
-    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
-    /// <returns>
-    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
-    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
-    /// </returns>
-    /// <remarks>
-    /// This default implementation is the compatible, allocating path: it calls
-    /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> with <see cref="DecisionDefaults.Model"/> and reads
-    /// the typed answers from the untyped response. <see cref="DecisionClient"/> overrides it.
-    /// </remarks>
-    /// <exception cref="ArgumentException"><paramref name="state"/> is not a string, object or array.</exception>
-    ValueTask<Result<T, DecisionError>> EvaluateAsync<T>(JsonElement state, CancellationToken cancellationToken)
-        where T : IQuestionSet<T>
-        => TypedEvaluation.EvaluateAsync<T>(this, TypedEvaluation.ToContent(state, nameof(state)), cancellationToken);
-
-    /// <summary>Asks <typeparamref name="T"/>'s questions about a UTF-8 JSON state and returns its typed answers.</summary>
-    /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
-    /// <param name="utf8JsonState">
-    /// The state as one UTF-8 JSON value: a string is sent as text; an object or array as structured content. It is
-    /// not referenced after the call returns.
-    /// </param>
-    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
-    /// <returns>
-    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
-    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
-    /// </returns>
-    /// <remarks>
-    /// This default implementation is the compatible, allocating path: it calls
-    /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> with <see cref="DecisionDefaults.Model"/> and reads
-    /// the typed answers from the untyped response. <see cref="DecisionClient"/> overrides it.
-    /// </remarks>
-    /// <exception cref="ArgumentException">
-    /// <paramref name="utf8JsonState"/> is not exactly one well-formed JSON string, object or array.
-    /// </exception>
-    ValueTask<Result<T, DecisionError>> EvaluateUtf8Async<T>(ReadOnlyMemory<byte> utf8JsonState, CancellationToken cancellationToken = default)
-        where T : IQuestionSet<T>
-        => TypedEvaluation.EvaluateAsync<T>(this, TypedEvaluation.ToContent(utf8JsonState, nameof(utf8JsonState)), cancellationToken);
-
-    /// <summary>
-    /// Asks <typeparamref name="T"/>'s questions about a typed state, the one its
-    /// <c>[Questions(State = typeof(TState))]</c> names, and returns its typed answers.
-    /// </summary>
-    /// <typeparam name="T">A <c>[Questions]</c> question set linked to <typeparamref name="TState"/>.</typeparam>
-    /// <typeparam name="TState">The state type.</typeparam>
-    /// <param name="state">The state; it must serialize to a JSON string, object or array.</param>
-    /// <param name="stateTypeInfo">The source-generated metadata <paramref name="state"/> is serialized with.</param>
-    /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
-    /// <remarks>
-    /// Calls <see cref="EvaluateAsync{T, TState}(TState, JsonTypeInfo{TState}, CancellationToken)"/> without cancellation.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="state"/> or <paramref name="stateTypeInfo"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="state"/> does not serialize to a string, object or array.</exception>
-    ValueTask<Result<T, DecisionError>> EvaluateAsync<T, TState>(TState state, JsonTypeInfo<TState> stateTypeInfo)
-        where T : IQuestionSet<T, TState>
-        => EvaluateAsync<T, TState>(state, stateTypeInfo, CancellationToken.None);
-
-    /// <summary>
-    /// Asks <typeparamref name="T"/>'s questions about a typed state, the one its
-    /// <c>[Questions(State = typeof(TState))]</c> names, and returns its typed answers.
-    /// </summary>
-    /// <typeparam name="T">A <c>[Questions]</c> question set linked to <typeparamref name="TState"/>.</typeparam>
-    /// <typeparam name="TState">The state type.</typeparam>
-    /// <param name="state">The state; it must serialize to a JSON string, object or array.</param>
-    /// <param name="stateTypeInfo">
-    /// The source-generated metadata <paramref name="state"/> is serialized with, from your <c>JsonSerializerContext</c>.
-    /// </param>
-    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
-    /// <returns>
-    /// The typed answers, or the <see cref="DecisionError"/> that prevented them; answers the question set rejects give
-    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
-    /// </returns>
-    /// <remarks>
-    /// This default implementation is the compatible, allocating path: it calls
-    /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> with <see cref="DecisionDefaults.Model"/> and reads
-    /// the typed answers from the untyped response. <see cref="DecisionClient"/> overrides it.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="state"/> or <paramref name="stateTypeInfo"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="state"/> does not serialize to a string, object or array.</exception>
-    ValueTask<Result<T, DecisionError>> EvaluateAsync<T, TState>(TState state, JsonTypeInfo<TState> stateTypeInfo, CancellationToken cancellationToken)
-        where T : IQuestionSet<T, TState>
-    {
-        if (state is null)
-        {
-            throw new ArgumentNullException(nameof(state));
-        }
-
-        ArgumentNullException.ThrowIfNull(stateTypeInfo);
-        return TypedEvaluation.EvaluateAsync<T>(this, TypedEvaluation.ToContent(state, stateTypeInfo, nameof(state)), cancellationToken);
-    }
-
-    /// <summary>Asks a built question set's questions about a state and returns its answers.</summary>
-    /// <param name="questionSet">The set, from <see cref="QuestionSetBuilder.Build"/>.</param>
-    /// <param name="state">The state: text, or a JSON object or array.</param>
-    /// <returns>The answers, or the <see cref="DecisionError"/> that prevented them.</returns>
-    /// <remarks>Calls <see cref="EvaluateAsync(QuestionSet, DecisionContent, CancellationToken)"/> without cancellation.</remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="questionSet"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="state"/> is uninitialized.</exception>
-    ValueTask<Result<Answers, DecisionError>> EvaluateAsync(QuestionSet questionSet, DecisionContent state)
-        => EvaluateAsync(questionSet, state, CancellationToken.None);
-
-    /// <summary>Asks a built question set's questions about a state and returns its answers.</summary>
-    /// <param name="questionSet">The set, from <see cref="QuestionSetBuilder.Build"/>.</param>
-    /// <param name="state">The state: text, or a JSON object or array.</param>
-    /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
-    /// <returns>
-    /// The answers, or the <see cref="DecisionError"/> that prevented them; answers the set rejects give
-    /// <see cref="DecisionErrorKind.InvalidResponse"/>.
-    /// </returns>
-    /// <remarks>
-    /// This default implementation is the compatible, allocating path: it calls
-    /// <see cref="EvaluateAsync(SystemOneRequest, CancellationToken)"/> with <see cref="DecisionDefaults.Model"/> and reads
-    /// the answers from the untyped response. <see cref="DecisionClient"/> overrides it.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="questionSet"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="state"/> is uninitialized.</exception>
-    ValueTask<Result<Answers, DecisionError>> EvaluateAsync(QuestionSet questionSet, DecisionContent state, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(questionSet);
-        DecisionContent.EnsureInitialized(state, nameof(state));
-        return TypedEvaluation.EvaluateAsync(this, questionSet, state, cancellationToken);
-    }
+    /// <summary>Returns an object of <paramref name="serviceType"/> that this client or a client it wraps provides, such as <see cref="DecisionClientMetadata"/> or a stage.</summary>
+    /// <param name="serviceType">The type to look for.</param>
+    /// <param name="serviceKey">An optional key; built-in clients return nothing for a non-null key.</param>
+    /// <returns>The object, or <see langword="null"/>.</returns>
+    object? GetService(Type serviceType, object? serviceKey = null);
 }

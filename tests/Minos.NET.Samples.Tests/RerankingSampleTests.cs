@@ -276,7 +276,7 @@ public sealed class RerankingSampleTests
         var services = new ServiceCollection();
         services.AddSampleDecisionClient(
             configuration.GetSection("Minos"), SampleMode.Replay, Path.Combine(directory, "recordings.json"), Sample, new RecordingSession())
-            .AddHttpMessageHandler(() => counter);
+            .HttpClient.AddHttpMessageHandler(() => counter);
         using var provider = services.BuildServiceProvider();
 
         var report = await RerankingSample.RunAsync(provider.GetRequiredService<IDecisionClient>(), CancellationToken.None);

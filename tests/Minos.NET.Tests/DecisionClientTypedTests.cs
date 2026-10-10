@@ -56,10 +56,18 @@ public partial record PaddedUrgency
     public partial Noul IsUrgent { get; }
 }
 
+/// <summary>Metadata whose options indent, which the request body must not: the body writer's options apply, as on main.</summary>
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(TicketContext))]
+internal sealed partial class IndentedTicketContextJsonContext : JsonSerializerContext;
+
 /// <summary>Covers <see cref="DecisionClient"/>'s own typed <c>EvaluateAsync</c> overloads, the raw UTF-8 path.</summary>
 public sealed class DecisionClientTypedTests : IDisposable
 {
     private const string TicketJson = """{"messages":[{"role":"user","content":"Help!"}]}""";
+
+    // Main's message for a typed state that is not a JSON string, object or array.
+    private const string InvalidStateMessage = "The state must be a JSON string, object or array. (Parameter 'state')";
 
     private static readonly TicketContext Ticket = new("Payouts failing", "Help! My payouts have been failing for 3 days.");
 
@@ -121,6 +129,87 @@ public sealed class DecisionClientTypedTests : IDisposable
             c => c.EvaluateAsync<UrgencyCheck>(state));
     }
 
+    // On main a caller could dispose its document as soon as the call returned, since the body was already written. The
+    // overload clones the element, so a retry that writes the request again, after the caller disposed it, still can.
+    [Fact]
+    public async Task JsonElement_DocumentDisposedRightAfterTheCall_IsStillSentOnARetry()
+    {
+        var firstAttemptMayAnswer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+        var handler = new StubHandler(async (_, _) =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+            {
+                await firstAttemptMayAnswer.Task;
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(Fixture.Text("response-noul.json"), Encoding.UTF8, "application/json"),
+            };
+        });
+        using var client = ClientTestKit.Client(_httpClients, handler, configure: o =>
+        {
+            o.MaxRetries = 1;
+            o.InitialBackoff = TimeSpan.FromMilliseconds(1);
+            o.Jitter = false;
+        });
+
+        var document = JsonDocument.Parse(TicketJson);
+        var call = client.EvaluateAsync<UrgencyCheck>(document.RootElement);
+        document.Dispose();
+        Assert.False(call.IsCompleted);
+        firstAttemptMayAnswer.SetResult();
+        var result = await call;
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, sent => Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, TicketJson), sent.Body));
+    }
+
+    // On main the UTF-8 overload wrote the body before the call returned, so a caller could reuse its buffer at once. The
+    // overload copies the bytes, so a retry that writes the request again, after the caller overwrote them, still sends
+    // the original state.
+    [Fact]
+    public async Task Utf8_BufferOverwrittenRightAfterTheCall_IsStillSentUnchangedOnARetry()
+    {
+        const string Overwrite = """{"messages":[{"role":"user","content":"Bye!!"}]}""";
+        Assert.Equal(TicketJson.Length, Overwrite.Length);
+        var firstAttemptMayAnswer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var attempts = 0;
+        var handler = new StubHandler(async (_, _) =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1)
+            {
+                await firstAttemptMayAnswer.Task;
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(Fixture.Text("response-noul.json"), Encoding.UTF8, "application/json"),
+            };
+        });
+        using var client = ClientTestKit.Client(_httpClients, handler, configure: o =>
+        {
+            o.MaxRetries = 1;
+            o.InitialBackoff = TimeSpan.FromMilliseconds(1);
+            o.Jitter = false;
+        });
+
+        var buffer = Encoding.UTF8.GetBytes(TicketJson);
+        var call = client.EvaluateUtf8Async<UrgencyCheck>(buffer);
+        Encoding.UTF8.GetBytes(Overwrite, buffer);
+        Assert.False(call.IsCompleted);
+        firstAttemptMayAnswer.SetResult();
+        var result = await call;
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.All(handler.Requests, sent => Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, TicketJson), sent.Body));
+    }
+
     [Fact]
     public Task Utf8_SendsTheDefaultPathsRequest()
     {
@@ -137,6 +226,85 @@ public sealed class DecisionClientTypedTests : IDisposable
         return AssertSendsTheDefaultRequest(
             c => c.EvaluateUtf8Async<UrgencyCheck>(utf8, CancellationToken.None),
             c => c.EvaluateUtf8Async<UrgencyCheck>(utf8, CancellationToken.None));
+    }
+
+    // On main the UTF-8 overload copied the caller's bytes into the body with WriteRawValue, so whitespace, escapes and
+    // characters the body's encoder would escape, such as é and <, reach the wire exactly as the caller wrote them.
+    [Theory]
+    [InlineData(" { \"subject\" : \"café é\",\n\t\"html\": \"<b>&amp;</b>\", \"escaped\": \"\\u00e9 \\u003c\", \"n\": 1.50 } ")]
+    [InlineData("[ 1 , \"<é>\" ,{}]")]
+    [InlineData("  \"plain <text> é \\u00e9\"  ")]
+    public async Task Utf8_SendsTheCallersBytesUnchanged(string json)
+    {
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        var pool = new CountingPool();
+        using var client = Client(handler, pool);
+
+        var result = await client.EvaluateUtf8Async<UrgencyCheck>(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, json), OnlyRequest(handler).Body);
+        Assert.Equal(0, pool.Outstanding);
+    }
+
+    [Fact]
+    public async Task Utf8_FromASliceOfALargerBuffer_SendsOnlyTheSlice()
+    {
+        const string Json = """{ "subject" : "<é>" }""";
+        var bytes = Encoding.UTF8.GetBytes("xx" + Json + "yy");
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateUtf8Async<UrgencyCheck>(bytes.AsMemory(2, bytes.Length - 4), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, Json), OnlyRequest(handler).Body);
+    }
+
+    // On main the typed overload serialized the state straight into the body's writer, so the body's encoder escaped it.
+    // The expected state is written the same way: JsonSerializer over a Utf8JsonWriter with default options.
+    [Fact]
+    public async Task TypedState_SendsWhatTheSerializerWritesIntoTheBody()
+    {
+        var state = new TicketContext("Café <b> & \"quoted\" é", "line\nbreak \u2028 😀 '+'");
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateAsync<TicketUrgency, TicketContext>(state, TicketContextJsonContext.Default.TicketContext);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            ExpectedBytes(TicketUrgency.Definition, SerializedIntoAWriter(state, TicketContextJsonContext.Default.TicketContext)),
+            OnlyRequest(handler).Body);
+    }
+
+    [Fact]
+    public async Task TypedState_WithIndentingOptions_SendsWhatTheSerializerWritesIntoTheBody()
+    {
+        var state = new TicketContext("Café <b>", "Help!");
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateAsync<TicketUrgency, TicketContext>(state, IndentedTicketContextJsonContext.Default.TicketContext);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            ExpectedBytes(TicketUrgency.Definition, SerializedIntoAWriter(state, IndentedTicketContextJsonContext.Default.TicketContext)),
+            OnlyRequest(handler).Body);
+        Assert.DoesNotContain('\n', OnlyRequest(handler).Body!);
+    }
+
+    [Fact]
+    public async Task TypedState_WhoseConverterWritesRawJson_SendsItUnchanged()
+    {
+        const string Json = """ { "a" : "\u00e9" } """;
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateAsync<PaddedUrgency, PaddedState>(new PaddedState(Json), PaddedStateJsonContext.Default.PaddedState);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ExpectedBytes(PaddedUrgency.Definition, Json), OnlyRequest(handler).Body);
     }
 
     [Fact]
@@ -174,6 +342,7 @@ public sealed class DecisionClientTypedTests : IDisposable
             () => client.EvaluateAsync<PaddedUrgency, PaddedState>(new PaddedState(" \n 42"), PaddedStateJsonContext.Default.PaddedState).AsTask());
 
         Assert.Equal("state", exception.ParamName);
+        Assert.Equal(InvalidStateMessage, exception.Message);
         Assert.Empty(handler.Requests);
         Assert.Equal(0, pool.Outstanding);
     }
@@ -400,22 +569,24 @@ public sealed class DecisionClientTypedTests : IDisposable
         ThrowsSynchronously<ArgumentNullException>(
             () => client.EvaluateAsync<TicketUrgency, TicketContext>(null!, TicketContextJsonContext.Default.TicketContext).AsTask());
         ThrowsSynchronously<ArgumentNullException>(() => client.EvaluateAsync<TicketUrgency, TicketContext>(Ticket, null!).AsTask());
-        Assert.Equal(
-            "state",
-            ThrowsSynchronously<ArgumentException>(
-                () => client.EvaluateAsync<NumericUrgency, NumericState>(new NumericState(42), NumericStateJsonContext.Default.NumericState).AsTask()).ParamName);
+        var numeric = ThrowsSynchronously<ArgumentException>(
+            () => client.EvaluateAsync<NumericUrgency, NumericState>(new NumericState(42), NumericStateJsonContext.Default.NumericState).AsTask());
+        Assert.Equal("state", numeric.ParamName);
+        Assert.Equal(InvalidStateMessage, numeric.Message);
 
         Assert.Empty(handler.Requests);
         Assert.Equal(0, pool.Outstanding);
     }
 
     [Fact]
-    public async Task TheDefaultPath_RejectsANumericTypedStateToo()
+    public async Task TheExtension_RejectsANumericTypedStateToo()
     {
         IDecisionClient fake = new CapturingClient();
 
-        await Assert.ThrowsAsync<ArgumentException>(
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
             async () => await fake.EvaluateAsync<NumericUrgency, NumericState>(new NumericState(42), NumericStateJsonContext.Default.NumericState));
+
+        Assert.Equal(InvalidStateMessage, exception.Message);
     }
 
     private async Task AssertSendsTheDefaultRequest<T>(
@@ -424,11 +595,12 @@ public sealed class DecisionClientTypedTests : IDisposable
         string? respondWith = "response-noul.json")
         where T : IQuestionSet<T>
     {
-        var fake = new CapturingClient();
+        var fake = new CapturingClient(responseJson: respondWith is null ? "{}" : Fixture.Text(respondWith));
         var expectedResult = await viaDefaultPath(fake);
-        var expected = JsonNode.Parse(JsonSerializer.Serialize(fake.OnlyRequest(), DecisionJsonContext.Default.SystemOneRequest))!;
-        Assert.Equal(DecisionDefaults.Model, expected["model"]!.GetValue<string>());
-        expected["model"] = TestModel;
+        var captured = fake.OnlyRequest();
+        Assert.Same(T.Definition, captured.Definition);
+        Assert.Null(captured.Model);
+        var expected = ExpectedBody(captured);
 
         var handler = StubHandler.Json(HttpStatusCode.OK, respondWith is null ? "{}" : Fixture.Text(respondWith));
         var pool = new CountingPool();
@@ -448,6 +620,22 @@ public sealed class DecisionClientTypedTests : IDisposable
         // The raw path rents its buffers from the client's pool; the default path would not touch it.
         Assert.True(pool.Rented >= 2, $"rented {pool.Rented}");
         Assert.Equal(0, pool.Outstanding);
+    }
+
+    // The body main's request writer produced: the state, the client's model, then the definition's questions.
+    private static string ExpectedBytes(QuestionSetDefinition definition, string stateJson)
+        => "{\"state\":" + stateJson + ",\"model\":\"" + TestModel + "\",\"questions\":"
+            + Encoding.UTF8.GetString(Minos.Protocols.SystemOneProtocol.QuestionsJson(definition)) + "}";
+
+    private static string SerializedIntoAWriter<TState>(TState state, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TState> typeInfo)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            JsonSerializer.Serialize(writer, state, typeInfo);
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     private DecisionClient Client(StubHandler handler, CountingPool? pool = null, DecisionProvider provider = DecisionProvider.TypeSafe)

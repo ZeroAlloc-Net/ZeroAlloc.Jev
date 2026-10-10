@@ -49,6 +49,7 @@ public class QuestionSetBenchmarks
     private QuestionSet _triage = null!;
     private QuestionDefinition[] _triageQuestions = [];
     private QuestionSet _twenty = null!;
+    private AnswerFactory<Answers> _twentyFactory = null!;
     private byte[] _twentyAnswers = [];
     private HttpClient _http = null!;
     private DecisionClient _client = null!;
@@ -80,6 +81,7 @@ public class QuestionSetBenchmarks
         }
 
         _twenty = twenty.Build().Value;
+        _twentyFactory = answers => new Answers(_twenty, answers.Probabilities, answers.HeapSlots ?? answers.Slots.ToArray());
         _twentyAnswers = Encoding.UTF8.GetBytes(answers.Append('}').ToString());
 
         (_http, _client) = ClientBenchmarks.CreateClient(ClientBenchmarks.TriageResponseJson);
@@ -111,13 +113,13 @@ public class QuestionSetBenchmarks
     [Benchmark]
     public ValueTask<Result<Answers, DecisionError>> EvaluateBuiltSet() => _client.EvaluateAsync(_triage, State);
 
-    /// <summary>Parses twenty answers by the built set's linear key scan.</summary>
+    /// <summary>Parses twenty answers through the protocol into the built set's <see cref="Answers"/>.</summary>
     [Benchmark]
     public Answers ParseBuiltTwenty()
     {
         var reader = new Utf8JsonReader(_twentyAnswers);
         reader.Read();
-        return _twenty.Parser(ref reader);
+        return SystemOneProtocol.Instance.ReadAnswers(ref reader, _twenty.Definition, _twentyFactory);
     }
 
     /// <summary>Parses the same twenty answers through the protocol into the generated type, as the baseline for the built set.</summary>

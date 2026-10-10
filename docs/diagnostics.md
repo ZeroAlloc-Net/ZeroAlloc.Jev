@@ -1,7 +1,7 @@
 ---
 id: diagnostics
 title: Diagnostics
-sidebar_position: 9
+sidebar_position: 10
 description: Every MIN analyzer rule with its severity, the two code fixes, and how to suppress a rule that does not apply.
 ---
 

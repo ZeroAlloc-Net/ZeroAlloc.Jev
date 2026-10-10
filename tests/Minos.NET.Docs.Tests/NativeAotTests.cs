@@ -36,7 +36,7 @@ public sealed partial class NativeAotTests
         var checks = AllocationChecks();
         var rows = PageTables.Rows(Page, "The allocation budgets");
 
-        Assert.Equal(22, rows.Length);
+        Assert.Equal(28, rows.Length);
         Assert.Equal(rows.Length, new HashSet<string>(rows.Select(row => PageTables.Code(row[0])), StringComparer.Ordinal).Count);
         Assert.All(
             rows,
@@ -67,7 +67,7 @@ public sealed partial class NativeAotTests
             PageTables.Rows(Page, "The allocation budgets").Select(row => PageTables.Code(row[0])),
             StringComparer.Ordinal);
 
-        Assert.Equal(22, called.Count);
+        Assert.Equal(28, called.Count);
         Assert.Equal(called, listed);
     }
 
@@ -76,7 +76,7 @@ public sealed partial class NativeAotTests
     {
         var checks = AllocationChecks();
 
-        Assert.All(["AnswersGet", "PatternHelpers", "NoulEquals", "AnswerSlotAccessors"], gate => Assert.Contains(0, Budgets(checks, gate)));
+        Assert.All(["AnswersGet", "PatternHelpers", "NoulEquals", "AnswerSlotAccessors", "PassThroughStage"], gate => Assert.Contains(0, Budgets(checks, gate)));
     }
 
     [Fact]
@@ -142,18 +142,22 @@ public sealed partial class NativeAotTests
     public void TheProseFigures_AreOnTheQuotingPagesToo()
     {
         var aot = Source("docs", "native-aot.md");
-        Assert.Contains("2984 B under Native AOT", aot, StringComparison.Ordinal);
+        Assert.Contains("3248 B under Native AOT", aot, StringComparison.Ordinal);
         Assert.Contains("It measures 2648 B", aot, StringComparison.Ordinal);
         Assert.Contains("211 B, measured under the JIT", aot, StringComparison.Ordinal);
 
+        var performance = Source("docs", "performance.md");
         var observability = Source("docs", "observability.md");
         Assert.Contains("about 480 B", observability, StringComparison.Ordinal);
         Assert.Contains("211 B, measured under the JIT", observability, StringComparison.Ordinal);
-        Assert.Contains("a typed call pays 1560 B, which is 4544 B listening", observability, StringComparison.Ordinal);
-        Assert.Contains("against 2984 B with nothing listening", observability, StringComparison.Ordinal);
+        Assert.Contains("a typed call pays 1368 B, which is 4616 B listening", observability, StringComparison.Ordinal);
+        Assert.Contains("against 3248 B with nothing listening", observability, StringComparison.Ordinal);
+        Assert.Contains("4616 B", performance, StringComparison.Ordinal);
+        Assert.Contains("3248 B", performance, StringComparison.Ordinal);
 
-        // The 1560 B is the difference of the two measured figures.
-        Assert.Equal(1560, 4544 - 2984);
+        // The 1368 B is the difference of the two measured figures, for the typed call and for the neutral one.
+        Assert.Equal(1368, 4616 - 3248);
+        Assert.Equal(1368, 4440 - 3072);
     }
 
     [GeneratedRegex(@"AllocationChecks\.(?<gate>\w+)\(\)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]

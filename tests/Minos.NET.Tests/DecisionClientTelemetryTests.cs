@@ -43,7 +43,7 @@ public sealed class DecisionClientTelemetryTests : IDisposable
     }
 
     [Fact]
-    public async Task TypedEvaluation_IsAnEvaluateTypedSpan_WithTheGeneratedQuestionCount()
+    public async Task TypedEvaluation_IsAnEvaluateSetSpan_WithTheDefinitionsQuestionCount()
     {
         using var capture = new TelemetryCapture();
         var pool = new CountingPool();
@@ -55,7 +55,7 @@ public sealed class DecisionClientTelemetryTests : IDisposable
         Assert.Equal(0, pool.Outstanding);
         var span = capture.Span();
         Assert.Equal($"evaluate {ClientTestKit.TestModel}", span.DisplayName);
-        Assert.Equal("evaluate-typed", capture.StartTags().Tag("minos.operation"));
+        Assert.Equal("evaluate-set", capture.StartTags().Tag("minos.operation"));
         Assert.Equal(ClientTestKit.TestModel, capture.StartTags().Tag("gen_ai.request.model"));
         Assert.Equal(1, capture.StartTags().Tag("minos.request.question_count"));
         Assert.Equal("jev-1.13.0", span.GetTagItem("gen_ai.response.model"));
@@ -79,7 +79,7 @@ public sealed class DecisionClientTelemetryTests : IDisposable
         Assert.Equal(Department.Billing, result.Value.Department.Value);
         Assert.True(pool.Rented > 0);
         Assert.Equal(0, pool.Outstanding);
-        Assert.Equal("evaluate-typed", capture.StartTags().Tag("minos.operation"));
+        Assert.Equal("evaluate-set", capture.StartTags().Tag("minos.operation"));
         Assert.Equal("jev-1.13.0", capture.Span().GetTagItem("gen_ai.response.model"));
     }
 
@@ -152,7 +152,7 @@ public sealed class DecisionClientTelemetryTests : IDisposable
 
         var spans = capture.Spans("Minos");
         Assert.Equal(4, spans.Length);
-        Assert.All(spans, span => Assert.Equal("evaluate-typed", span.GetTagItem("minos.operation")));
+        Assert.All(spans, span => Assert.Equal("evaluate-set", span.GetTagItem("minos.operation")));
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public sealed class DecisionClientTelemetryTests : IDisposable
     }
 
     [Fact]
-    public async Task BuiltSetEvaluation_IsAnEvaluateBuiltSetSpan()
+    public async Task BuiltSetEvaluation_IsAnEvaluateSetSpan()
     {
         using var capture = new TelemetryCapture();
         var pool = new CountingPool();
@@ -185,7 +185,7 @@ public sealed class DecisionClientTelemetryTests : IDisposable
 
         Assert.True(result.IsSuccess);
         Assert.Equal(0, pool.Outstanding);
-        Assert.Equal("evaluate-built-set", capture.StartTags().Tag("minos.operation"));
+        Assert.Equal("evaluate-set", capture.StartTags().Tag("minos.operation"));
         Assert.Equal(1, capture.StartTags().Tag("minos.request.question_count"));
         Assert.Empty(capture.Points("minos.answer.confidence"));
     }

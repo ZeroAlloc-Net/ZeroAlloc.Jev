@@ -44,10 +44,10 @@ public sealed class AddDecisionClientConfigurationTests
         var configuration = Configuration(("ApiKey", "bound-key"), ("BaseAddress", "http://bound.local/api/"), ("MaxRetries", "0"));
         var handler = Noul();
         var services = new ServiceCollection();
-        services.AddDecisionClient(configuration).ConfigurePrimaryHttpMessageHandler(() => handler);
+        services.AddDecisionClient(configuration).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var provider = services.BuildServiceProvider();
 
-        var result = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request());
+        var result = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request());
 
         Assert.True(result.IsSuccess);
         Assert.Equal(new Uri("http://bound.local/api/v1/systemone"), OnlyRequest(handler).Uri);

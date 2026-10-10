@@ -86,7 +86,7 @@ you asked for it. Everything else, including every network and service failure, 
 
 ## Options
 
-`DecisionClientOptions` has nine properties, and every one is optional.
+`DecisionClientOptions` has ten properties, and every one is optional.
 
 | Property | Default | Valid values | What it does |
 | --- | --- | --- | --- |
@@ -99,6 +99,7 @@ you asked for it. Everything else, including every network and service failure, 
 | `InitialBackoff` | 500 ms | positive, and at most about 24.8 days | The first wait between attempts. It doubles for each further retry. |
 | `MaxRetryDelay` | 30 seconds | at least `InitialBackoff`, and at most about 24.8 days | The longest wait between attempts, for the backoff and for a server's `Retry-After` alike. |
 | `Jitter` | `true` | `true` or `false` | Adds a random extra of up to 50 percent to each backoff wait, so many clients do not retry in step. |
+| `UseStandardPipeline` | `true` | `true` or `false` | Whether a `DecisionRequest` call runs through the standard [pipeline](pipeline.md) of telemetry, logging and retries. `false` leaves one attempt per call, for a pipeline of your own. |
 
 Each option you set beats the environment. The order is: the option, then the environment variable, then the provider's
 default. A blank API key counts as unset. `TYPESAFE_BASE_URL` never applies to OpenRouter, so an OpenRouter key is
@@ -123,6 +124,7 @@ public static DecisionClientOptions SpelledOut(string apiKey)
         InitialBackoff = TimeSpan.FromMilliseconds(500),
         MaxRetryDelay = TimeSpan.FromSeconds(30),
         Jitter = true,
+        UseStandardPipeline = true,
     };
 ```
 <!-- endSnippet -->
@@ -178,7 +180,9 @@ fail in the constructor, it can only be because an environment variable changed 
 
 ## Retries
 
-Minos retries a failed call for you. These failures are retried:
+Minos retries a failed call for you. For a typed, built-set or `DecisionRequest` call, the retries are the retry stage
+of the client's [pipeline](pipeline.md), `RetryingDecisionClient`, which the client builds from the options below. The
+raw System One calls retry with the same settings. These failures are retried:
 
 - rate limiting, HTTP 429;
 - overload, HTTP 503 and 529;
@@ -189,6 +193,10 @@ Minos retries a failed call for you. These failures are retried:
 
 Everything else is reported at once: a rejected key (401, 403), an invalid request (400, 422), and any other status.
 Trying those again would give the same answer.
+
+With `UseStandardPipeline` set to `false`, nothing is retried, the raw calls included, until you add a retry stage
+yourself with `UseRetries()`. [Building your own pipeline](pipeline.md#building-your-own-pipeline) shows how, and how
+to retry other kinds of failure with `DecisionRetryOptions.ShouldRetry`.
 
 The wait before the first retry is `InitialBackoff`, and it doubles each time, up to `MaxRetryDelay`. With the defaults
 the waits are about 0.5 s, then 1 s, and a call makes at most three attempts. With `Jitter` on, each wait gains a random
@@ -386,11 +394,18 @@ most uses. Underneath them is the raw API, the shape of the HTTP request: a stat
 with ids you choose. You rarely need it, but it is there when you want the exact wire form, or are building your own
 layer.
 
+The raw calls, `EvaluateAsync(SystemOneRequest)` and `ListModelsAsync`, are members of `DecisionClient`, not of
+`IDecisionClient`. Code that holds an `IDecisionClient`, such as a class that takes one from dependency injection,
+reaches them with `client.GetService<DecisionClient>()`, which finds the `DecisionClient` under any stages wrapped
+around it and returns `null` when there is none. [Finding a stage or the
+transport](pipeline.md#finding-a-stage-or-the-transport) has an example. The raw calls do not run through the
+pipeline's stages: they have their own span and log, and retry with the client's settings.
+
 <!-- snippet: ClientAndErrors_RawRequest -->
 ```cs
 // The raw API names its own model and questions, with ids you choose. Use it when the questions are not known at
 // compile time and the question set builder does not fit. Typed evaluation is shorter wherever it can be used.
-public static async Task<string> UrgencyAsync(IDecisionClient client, string message, CancellationToken cancellationToken)
+public static async Task<string> UrgencyAsync(DecisionClient client, string message, CancellationToken cancellationToken)
 {
     var result = await client.EvaluateAsync(
         new SystemOneRequest
@@ -472,7 +487,7 @@ Code in a namespace under `Minos` never sees the clash: it finds Minos's types f
 
 <!-- snippet: ClientAndErrors_Models -->
 ```cs
-public static async Task<string> ModelsAsync(IDecisionClient client, CancellationToken cancellationToken)
+public static async Task<string> ModelsAsync(DecisionClient client, CancellationToken cancellationToken)
 {
     var result = await client.ListModelsAsync(cancellationToken);
     if (result.IsFailure)

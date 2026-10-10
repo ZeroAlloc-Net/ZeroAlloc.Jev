@@ -21,7 +21,7 @@ namespace Minos.Tests;
 public sealed class DecisionClientDisposalTests
 {
     // Disposing the owned HttpClient cancels the token the handler waits on, so the handler fails with
-    // TaskCanceledException, as a real handler does. That reached the caller as Timeout, and the retry proxy retried it.
+    // TaskCanceledException, as a real handler does. That once reached the caller as Timeout, and was retried.
     [Fact]
     public async Task InFlightEvaluate_TornDownByDispose_IsDisposed_AfterOneAttempt()
     {
@@ -98,8 +98,8 @@ public sealed class DecisionClientDisposalTests
         Assert.Null(result.Error.Exception);
         _ = ClientTestKit.OnlyRequest(gate.Handler);
 
-        // The logging decorator logs the retry the 503 earns before the proxy asks for it; the guard then refuses it, as
-        // LoggingDecisionApi's remarks say. The final failure is logged as Disposed.
+        // The retry loop logs the retry the 503 earns before its wait, then finds the client disposed and does not send
+        // it. The final failure is logged as Disposed.
         Assert.Equal(nameof(DecisionErrorKind.Overloaded), LogAssert.Field(logs.Only(1003), "ErrorKind"));
         Assert.Equal(nameof(DecisionErrorKind.Disposed), LogAssert.Field(logs.Only(1002), "ErrorKind"));
     }
@@ -107,7 +107,7 @@ public sealed class DecisionClientDisposalTests
     // The order the other way round: the per-attempt time-out fires and is mapped while the client is not yet disposed,
     // then Dispose runs before the call returns. ZeroAlloc.Rest stops its per-attempt span right after the mapper
     // returns, still inside the transport, so a listener on that span disposes the client at exactly that point: before
-    // the guard, the logging decorator, the retry proxy, the operations or the client see the result. MaxRetries is 0
+    // the retry loop, the operations or the client see the result. MaxRetries is 0
     // because a retry would be due otherwise, and a disposed client refuses it with Disposed, which is correct but would
     // hide the order this checks. An implementation that decided Disposed from the flag after mapping would fail here.
     [Fact]
@@ -140,11 +140,11 @@ public sealed class DecisionClientDisposalTests
         await Assert.ThrowsAsync<ObjectDisposedException>(async () => await client.EvaluateAsync(Request()));
     }
 
-    // Disposal lands after the guard read the flag but before the send checked it, so the send throws
+    // Disposal lands after the client read the flag but before the send checked it, so the send throws
     // ObjectDisposedException, as HttpClient and SocketsHttpHandler do. Forced here by a handler that disposes the client
     // and then throws that exception for its one attempt.
     [Fact]
-    public async Task DisposeBetweenTheGuardAndTheSend_IsDisposed_AfterOneAttempt()
+    public async Task DisposeBetweenTheEntryCheckAndTheSend_IsDisposed_AfterOneAttempt()
     {
         using var logs = new LogCapture();
         using var capture = new TelemetryCapture();
@@ -161,6 +161,52 @@ public sealed class DecisionClientDisposalTests
         AssertDisposed(result);
         Assert.IsType<ObjectDisposedException>(result.Error.Exception);
         _ = ClientTestKit.OnlyRequest(handler);
+        Assert.DoesNotContain(1006, logs.EventIds);
+        Assert.Equal(nameof(DecisionErrorKind.Disposed), LogAssert.Field(logs.Only(1002), "ErrorKind"));
+        Assert.Equal("Disposed", capture.Span().GetTagItem("error.type"));
+    }
+
+    // The typed path's retry stage: the 503 earns a retry, logged, and the disposed client does not send it.
+    [Fact]
+    public async Task TypedDisposeBeforeATransientFailure_StopsItsRetry_AndIsDisposed()
+    {
+        using var logs = new LogCapture();
+        var gate = new Gate(() => Status(HttpStatusCode.ServiceUnavailable), honoursCancellation: false);
+        var pool = new CountingPool();
+        var client = Owned(gate.Handler, pool: pool, logger: logs.Factory.CreateLogger(DecisionLog.Category));
+
+        var call = client.EvaluateAsync<UrgencyCheck>("Help!").AsTask();
+        var result = await DisposeWhileBlocked(gate, client, call);
+
+        AssertDisposed(result);
+        Assert.Null(result.Error.Exception);
+        _ = ClientTestKit.OnlyRequest(gate.Handler);
+        Assert.Equal(0, pool.Outstanding);
+        Assert.Equal(nameof(DecisionErrorKind.Overloaded), LogAssert.Field(logs.Only(1003), "ErrorKind"));
+        Assert.Equal(nameof(DecisionErrorKind.Disposed), LogAssert.Field(logs.Only(1002), "ErrorKind"));
+    }
+
+    // The transport's side of the same race: its send throws ObjectDisposedException once the client is disposed.
+    [Fact]
+    public async Task TypedDisposeBetweenTheEntryCheckAndTheSend_IsDisposed_AfterOneAttempt()
+    {
+        using var logs = new LogCapture();
+        using var capture = new TelemetryCapture();
+        var pool = new CountingPool();
+        DecisionClient? client = null;
+        var handler = new StubHandler((_, _) =>
+        {
+            client!.Dispose();
+            throw new ObjectDisposedException(typeof(HttpClient).FullName);
+        });
+        client = Owned(handler, pool: pool, logger: logs.Factory.CreateLogger(DecisionLog.Category));
+
+        var result = await client.EvaluateAsync<UrgencyCheck>("Help!");
+
+        AssertDisposed(result);
+        Assert.IsType<ObjectDisposedException>(result.Error.Exception);
+        _ = ClientTestKit.OnlyRequest(handler);
+        Assert.Equal(0, pool.Outstanding);
         Assert.DoesNotContain(1006, logs.EventIds);
         Assert.Equal(nameof(DecisionErrorKind.Disposed), LogAssert.Field(logs.Only(1002), "ErrorKind"));
         Assert.Equal("Disposed", capture.Span().GetTagItem("error.type"));

@@ -1,7 +1,7 @@
 ---
 id: observability
 title: Logging, traces and metrics
-sidebar_position: 7
+sidebar_position: 8
 description: What the Minos client logs, which spans and metrics it emits, what it never records, and what listening costs.
 ---
 
@@ -15,11 +15,33 @@ and why, how many tokens you used, and how sure Jev was. `DecisionClient` report
 - **Traces**, as `System.Diagnostics` spans, from an `ActivitySource` named `Minos`.
 - **Metrics**, as `System.Diagnostics.Metrics` instruments, from a `Meter` named `Minos`.
 
+Each signal comes from a stage of the [client pipeline](pipeline.md), which every `DecisionClient` builds for you.
+[Which stage emits what](#which-stage-emits-what) has the details.
+
 All three describe the call and never its content. Your state, your questions, the answers, your API key and the
 server's error text stay out of every one of them, and the sections below say exactly where the line is drawn. All
-three are also cheap: with nothing listening they add nothing to calls that complete synchronously, and a small fixed
-cost to asynchronous ones. [The cost of listening](#the-cost-of-listening) and
+three are also cheap: with nothing listening they add nothing, and only an enabled logger adds a state machine to a
+call that completes asynchronously. [The cost of listening](#the-cost-of-listening) and
 [the cost of logging](#the-cost-of-logging) give the figures.
+
+## Which stage emits what
+
+A call through `EvaluateAsync(DecisionRequest)`, which every typed and built-set call makes, is observed by the stages
+of the [pipeline](pipeline.md#what-every-call-goes-through). The raw System One calls do not run through the stages,
+so `DecisionClient` instruments them itself.
+
+| Signal | Emitted by | When |
+| --- | --- | --- |
+| The span `evaluate {model}` and the six metrics | `OpenTelemetryDecisionClient` | Once per call, over every attempt. |
+| Events 1001, 1002 and 1006 | `LoggingDecisionClient` | Once per call, when the client has a logger factory. |
+| Event 1003 | `RetryingDecisionClient` | For each attempt it retries, when it has a logger. |
+| The spans `evaluate {model}` and `list_models`, their metrics, and events 1001 to 1006 of the raw calls | `DecisionClient` | For `EvaluateAsync(SystemOneRequest)` and `ListModelsAsync`. |
+
+With `UseStandardPipeline` set to `false`, a `DecisionRequest` call emits none of these until you add the stages
+yourself, as [Building your own pipeline](pipeline.md#building-your-own-pipeline) shows. The raw calls still emit
+theirs. A stage reads the provider, the endpoint and the default model from the `DecisionClientMetadata` of the client
+inside it. Over a client that offers none, such as a test fake, it reports the provider and the model as `unknown`
+and leaves out the `server.*` attributes.
 
 ## Logging
 
@@ -87,9 +109,12 @@ such as a JSON console or Serilog, receives each `{Placeholder}` below as a fiel
 
 A call logs once, when it completes, and logs again for each attempt it is about to retry.
 
-- **`Operation`** names the call: `evaluate` for the raw `EvaluateAsync(SystemOneRequest)`, `evaluate-typed` for the
-  typed overloads, `evaluate-built-set` for a [built question set](question-sets-at-run-time.md), and `list-models` for
-  model listing.
+- **`Operation`** names the call: `evaluate-set` for every `EvaluateAsync(DecisionRequest)` call, the typed overloads
+  and a [built question set](question-sets-at-run-time.md) included, and, for the raw System One calls, `evaluate` for
+  `EvaluateAsync(SystemOneRequest)` and `list-models` for model listing.
+- **`Provider`**, in event 1001 of an `evaluate-set` call, is the provider name of the client's
+  `DecisionClientMetadata`, `typesafe` or `openrouter`, the same value as the span's `gen_ai.provider.name`. The raw
+  calls log `TypeSafe` or `OpenRouter` in events 1001, 1004 and 1005.
 - **Success** is a Debug event, 1001 for an evaluation and 1004 for a model listing. `QuestionCount` is the number of
   questions asked.
 - **Failure** is a Warning, 1002 or 1005. It covers every failure the call returns as a
@@ -108,9 +133,11 @@ A call logs once, when it completes, and logs again for each attempt it is about
 A model listing against OpenRouter fails with `Unsupported` before any request is sent. It logs 1005, like any other
 failure.
 
-The client writes these records for its own calls. A
-[hand-written `IDecisionClient`](testing-your-code.md#way-one-a-fake-idecisionclient) that relies on the interface's default
-methods for typed evaluation logs nothing, because the logging lives in `DecisionClient`.
+The logging stage writes 1001, 1002 and 1006 for an `evaluate-set` call, and the retry stage writes 1003. The raw
+calls log through the client itself: 1001, 1002 and 1006 for `EvaluateAsync(SystemOneRequest)`, 1004 and 1005 for a
+model listing, and 1003 for each attempt they retry. A
+[hand-written `IDecisionClient`](testing-your-code.md#way-one-a-fake-idecisionclient) logs nothing, because it has no
+stages. To log a call to one, wrap it: `fake.AsBuilder().UseLogging(loggerFactory).Build()`.
 
 ### What is never logged
 
@@ -142,7 +169,8 @@ hold.
   client takes the unlogged path. It allocates nothing extra and only asks `IsEnabled`. The check is made on each call,
   so a filter that changes while the program runs is followed.
 - With a logger enabled, a call that completes synchronously still allocates nothing extra. A call that completes
-  asynchronously, as every real network call does, allocates the state machines of the logging wrappers, about 480 B.
+  asynchronously, as every real network call does, allocates the logging stage's state machine. Phase 3.1 measured the
+  logging wrappers of that time at about 480 B; the pipeline's logging stage has not been measured on its own yet.
 
 [Phase 3.1](performance.md#phase-31--logging) in the performance page has the measurements. The AOT gates behind them
 are `EvaluateRoundTripWithNullLoggerFactory` and `TypedEvaluateRoundTripWithEveryLevelFiltered`, which keep the budgets
@@ -152,7 +180,8 @@ budgets.
 
 ## Traces
 
-The client opens one span for each operation, of kind `Client`. Its name is `evaluate {gen_ai.request.model}`, for
+The client opens one span for each operation, of kind `Client`. For a `DecisionRequest` call the telemetry stage opens
+it, and for a raw call the client does. Its name is `evaluate {gen_ai.request.model}`, for
 example `evaluate jev-latest`, for an evaluation and `list_models` for a model listing. The span measures the whole
 call, including the retries. A call that fails on every attempt is still one span.
 
@@ -298,13 +327,13 @@ named `minos.*`.
 | `gen_ai.request.model` | start | The requested model. Evaluations only. |
 | `server.address` | start | The host of the base address. |
 | `server.port` | start | The port of the base address. |
-| `minos.operation` | start | `evaluate`, `evaluate-typed`, `evaluate-built-set` or `list-models`, as in the logs. |
+| `minos.operation` | start | `evaluate`, `evaluate-set` or `list-models`, as in the logs. |
 | `minos.request.question_count` | start | The number of questions. Evaluations only. |
 | `gen_ai.response.model` | success | The model that answered. Evaluations only. |
 | `gen_ai.usage.input_tokens` | success | The input tokens. Evaluations only. |
 | `gen_ai.usage.output_tokens` | success | The output tokens. Evaluations only. |
-| `gen_ai.response.id` | success | OpenRouter's generation id, when it reports one. Only the raw `EvaluateAsync(SystemOneRequest)`. |
-| `minos.usage.cost` | success | The cost in US dollars, when OpenRouter reports it. Only the raw `EvaluateAsync(SystemOneRequest)`. |
+| `gen_ai.response.id` | success | OpenRouter's generation id, when it reports one. Evaluations only. |
+| `minos.usage.cost` | success | The cost in US dollars, when OpenRouter reports it. Evaluations only. |
 | `error.type` | failure | The name of the `DecisionErrorKind`, such as `RateLimited`, or the full type name of a thrown exception. |
 
 The start attributes are set when the span is created, so a sampler sees them and can decide on them. A failed result
@@ -364,21 +393,23 @@ exception message. The one thing a thrown exception adds to a span is the full n
 
 ## The cost of listening
 
-Telemetry is always compiled in. With nothing listening to the source or the meter, the instrumentation hands back each
-call's own task, so the numbers are these:
+Telemetry is always compiled in. With nothing listening to the source or the meter, the telemetry stage and the raw
+calls' instrumentation hand back each call's own task, so the numbers are these:
 
-- **Raw evaluation, model listing, and every call that completes synchronously:** nothing extra.
-- **A typed or built-set call that completes asynchronously,** as a real network call does: one extra state machine of
-  211 B, measured under the JIT. It hands back the answers and returns the pooled response buffer.
-- **While listening,** a call pays for the span, its attributes and the measurements. The benchmarks measure about 1.0
-  to 1.8 KB per call, depending on the path. Under Native AOT a typed call pays 1560 B, which is 4544 B listening
-  against 2984 B with nothing listening.
+- **With nothing listening:** nothing extra, whether the call completes synchronously or not. Before the pipeline, a
+  typed or built-set call that completed asynchronously paid one extra state machine of 211 B, measured under the JIT;
+  the telemetry stage no longer needs it.
+- **While listening,** a call pays for the span, its attributes and the measurements. Under Native AOT,
+  a typed call pays 1368 B, which is 4616 B listening against 3248 B with nothing listening, and a
+  `DecisionRequest` call pays the same 1368 B, 4440 B against 3072 B.
+  [Phase 6.3](performance.md#phase-63--the-client-pipeline) in the performance page has the details.
 
-[Phase 3.2](performance.md#phase-32--telemetry) in the performance page has the table. The AOT gates are
-`EvaluateRoundTripWhileListening`, `TypedEvaluateRoundTripWhileListening` and `EvaluateBuiltSetRoundTripWhileListening`,
-and [Native AOT](native-aot.md) lists their budgets. As with logging, a
-[hand-written `IDecisionClient`](testing-your-code.md#way-one-a-fake-idecisionclient) that relies on the default interface methods
-for typed evaluation emits nothing.
+[Phase 3.2](performance.md#phase-32--telemetry) in the performance page has the benchmarks from before the pipeline,
+about 1.0 to 1.8 KB per call under the JIT, depending on the path. The AOT gates are
+`EvaluateRoundTripWhileListening`, `TypedEvaluateRoundTripWhileListening`, `NeutralEvaluateRoundTripWhileListening` and
+`EvaluateBuiltSetRoundTripWhileListening`, and [Native AOT](native-aot.md) lists their budgets. As with logging, a
+[hand-written `IDecisionClient`](testing-your-code.md#way-one-a-fake-idecisionclient) emits nothing until you wrap it
+with `UseOpenTelemetry()`.
 
 The GenAI conventions are still in development, and the token metric names follow the main branch of the
 `semantic-conventions-genai` repository, which has no release yet. Names may change before this package reaches 1.0.

@@ -34,7 +34,7 @@ public sealed class SampleHostTests : IDisposable
         // Whatever the process environment holds, the placeholder key passes startup validation and the replay handler
         // is the primary handler, so no request can leave the process.
         await using var provider = SampleHost.BuildReplayProvider(_directory, Sample);
-        var client = provider.GetRequiredService<IDecisionClient>();
+        var client = provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!;
 
         var answered = await client.EvaluateAsync(Request("Is this urgent?"));
         Assert.True(answered.IsSuccess);
@@ -91,10 +91,10 @@ public sealed class SampleHostTests : IDisposable
                 Path.Combine(_directory, "recordings.json"),
                 Sample,
                 new RecordingSession())
-            .ConfigurePrimaryHttpMessageHandler(() => capture);
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => capture);
         await using var provider = services.BuildServiceProvider();
 
-        _ = await provider.GetRequiredService<IDecisionClient>().EvaluateAsync(Request("Is this urgent?"));
+        _ = await provider.GetRequiredService<IDecisionClient>().GetService<DecisionClient>()!.EvaluateAsync(Request("Is this urgent?"));
 
         return capture.Hash ?? throw new InvalidOperationException("The client sent nothing.");
     }

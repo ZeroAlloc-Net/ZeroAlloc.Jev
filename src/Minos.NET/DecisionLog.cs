@@ -20,11 +20,8 @@ internal static partial class DecisionLog
     /// <summary>The operation name of <see cref="DecisionClient.EvaluateAsync(SystemOneRequest, CancellationToken)"/>.</summary>
     public const string Evaluate = "evaluate";
 
-    /// <summary>The operation name of the typed <c>EvaluateAsync&lt;T&gt;</c> overloads.</summary>
-    public const string EvaluateTyped = "evaluate-typed";
-
-    /// <summary>The operation name of <see cref="DecisionClient.EvaluateAsync(QuestionSet, DecisionContent, CancellationToken)"/>.</summary>
-    public const string EvaluateBuiltSet = "evaluate-built-set";
+    /// <summary>The operation name of every neutral <see cref="IDecisionClient.EvaluateAsync"/> call, typed and built sets included.</summary>
+    public const string EvaluateSet = "evaluate-set";
 
     /// <summary>The operation name of <see cref="DecisionClient.ListModelsAsync(CancellationToken)"/>.</summary>
     public const string ListModels = "list-models";
@@ -48,7 +45,7 @@ internal static partial class DecisionLog
         Level = LogLevel.Debug,
         Message = "Minos {Operation} on {Model} via {Provider} succeeded: {QuestionCount} questions in {DurationMs} ms.")]
     public static partial void EvaluationSucceeded(
-        ILogger logger, string operation, string model, DecisionProvider provider, int questionCount, double durationMs);
+        ILogger logger, string operation, string model, string provider, int questionCount, double durationMs);
 
     /// <summary>An evaluation failed, after any retries; the message is the error's <see cref="SafeMessage"/>.</summary>
     [LoggerMessage(

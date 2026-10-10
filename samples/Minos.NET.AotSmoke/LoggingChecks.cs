@@ -45,7 +45,7 @@ internal static class LoggingChecks
             result.IsSuccess
                 && records.Length == 1
                 && records[0].EventId == 1001
-                && records[0].Field("Operation") is "evaluate-typed"
+                && records[0].Field("Operation") is "evaluate-set"
                 && records[0].Field("QuestionCount") is 3,
             "a typed evaluation logs its generated set's question count under Native AOT");
     }

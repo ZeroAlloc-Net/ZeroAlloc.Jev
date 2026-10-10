@@ -31,7 +31,7 @@ public sealed class DependencyInjectionTests
     {
         var builder = NewBuilder();
         using var handler = new ScriptedDecision.Handler([Reply.Ok(UrgentResponse)]);
-        DecisionRegistration.AddDecision(builder).ConfigurePrimaryHttpMessageHandler(() => handler);
+        DecisionRegistration.AddDecision(builder).HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         using var host = builder.Build();
         await host.StartAsync();
 
@@ -284,7 +284,7 @@ public sealed class DependencyInjectionTests
         var after = new ServiceCollection();
         using var third = new ScriptedDecision.Handler([Reply.Ok(UrgentResponse)]);
         after.AddTransient<TraceHeaderHandler>();
-        after.AddDecisionClient(options => options.ApiKey = "key").ConfigurePrimaryHttpMessageHandler(() => third);
+        after.AddDecisionClient(options => options.ApiKey = "key").HttpClient.ConfigurePrimaryHttpMessageHandler(() => third);
         after.ConfigureHttpClientDefaults(defaults => defaults.AddHttpMessageHandler<TraceHeaderHandler>());
         await using (var provider = after.BuildServiceProvider())
         {
@@ -327,7 +327,7 @@ public sealed class DependencyInjectionTests
         using var stub = new ScriptedDecision.Handler([Reply.Ok(UrgentResponse)]);
         services.AddTransient<TraceHeaderHandler>();
         services.AddDecisionClient(options => options.ApiKey = "key")
-            .ConfigurePrimaryHttpMessageHandler(() => stub)
+            .HttpClient.ConfigurePrimaryHttpMessageHandler(() => stub)
             .AddHttpMessageHandler<TraceHeaderHandler>()
             .ConfigureAdditionalHttpMessageHandlers((handlers, _) => handlers.Clear());
         await using var provider = services.BuildServiceProvider();
@@ -444,7 +444,7 @@ public sealed class DependencyInjectionTests
         var services = new ServiceCollection();
         services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddProvider(capture));
         using var handler = new ScriptedDecision.Handler([Reply.Ok(UrgentResponse)]);
-        var builder = services.AddDecisionClient(options => options.ApiKey = "key").ConfigurePrimaryHttpMessageHandler(() => handler);
+        var builder = services.AddDecisionClient(options => options.ApiKey = "key").HttpClient.ConfigurePrimaryHttpMessageHandler(() => handler);
         if (addDefaultLogger)
         {
             builder.AddDefaultLogger();

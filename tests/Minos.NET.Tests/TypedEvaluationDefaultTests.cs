@@ -1,10 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using Minos.Serialization;
 using ZeroAlloc.Results;
-using Minos.Protocols;
 
 namespace Minos.Tests;
 
@@ -20,13 +17,13 @@ public partial record TicketUrgency
     public partial Noul IsUrgent { get; }
 }
 
-/// <summary>Covers the typed <c>EvaluateAsync</c> default interface methods on <see cref="IDecisionClient"/>.</summary>
+/// <summary>Covers the typed <see cref="DecisionClientExtensions"/> overloads over a fake <see cref="IDecisionClient"/>.</summary>
 public sealed class TypedEvaluationDefaultTests
 {
     [Fact]
     public async Task String_ReturnsTypedAnswers()
     {
-        IDecisionClient client = FakeClient.Returning("response-noul.json");
+        IDecisionClient client = Returning("response-noul.json");
 
         var result = await client.EvaluateAsync<UrgencyCheck>("text");
 
@@ -36,26 +33,26 @@ public sealed class TypedEvaluationDefaultTests
     }
 
     [Fact]
-    public async Task String_SendsTheGeneratedQuestionsTheStateAndTheDefaultModel()
+    public async Task String_SendsTheGeneratedDefinitionAndTheState_WithoutAModel()
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
 
-        await ((IDecisionClient)fake).EvaluateAsync<UrgencyCheck>("text");
+        await fake.EvaluateAsync<UrgencyCheck>("text");
 
         var request = fake.OnlyRequest();
         Assert.True(request.State.TryGetString(out var state));
         Assert.Equal("text", state);
-        Assert.Equal(DecisionDefaults.Model, request.Model);
-        AssertQuestionsEqual(SystemOneProtocol.QuestionsJson(UrgencyCheck.Definition), request);
+        Assert.Null(request.Model);
+        Assert.Same(UrgencyCheck.Definition, request.Definition);
     }
 
     [Fact]
     public async Task CancellationToken_IsForwarded()
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
         using var cts = new CancellationTokenSource();
 
-        await ((IDecisionClient)fake).EvaluateAsync<UrgencyCheck>("text", cts.Token);
+        await fake.EvaluateAsync<UrgencyCheck>("text", cts.Token);
 
         Assert.Equal(cts.Token, fake.LastToken);
     }
@@ -64,12 +61,12 @@ public sealed class TypedEvaluationDefaultTests
     public async Task JsonElement_And_Utf8_SendTheSameState()
     {
         const string json = """{"messages":[{"role":"user","content":"Help!"}]}""";
-        var fromElement = FakeClient.Returning("response-noul.json");
-        var fromUtf8 = FakeClient.Returning("response-noul.json");
+        var fromElement = Returning("response-noul.json");
+        var fromUtf8 = Returning("response-noul.json");
         using var document = JsonDocument.Parse(json);
 
-        var elementResult = await ((IDecisionClient)fromElement).EvaluateAsync<UrgencyCheck>(document.RootElement);
-        var utf8Result = await ((IDecisionClient)fromUtf8).EvaluateUtf8Async<UrgencyCheck>(Encoding.UTF8.GetBytes(json));
+        var elementResult = await fromElement.EvaluateAsync<UrgencyCheck>(document.RootElement);
+        var utf8Result = await fromUtf8.EvaluateUtf8Async<UrgencyCheck>(Encoding.UTF8.GetBytes(json));
 
         Assert.True(elementResult.IsSuccess);
         Assert.True(utf8Result.IsSuccess);
@@ -78,15 +75,15 @@ public sealed class TypedEvaluationDefaultTests
         Assert.True(fromUtf8.OnlyRequest().State.TryGetJson(out var utf8State));
         Assert.True(JsonElement.DeepEquals(elementState, utf8State));
         Assert.True(JsonElement.DeepEquals(document.RootElement, utf8State));
-        AssertQuestionsEqual(SystemOneProtocol.QuestionsJson(UrgencyCheck.Definition), fromUtf8.Requests[0]);
+        Assert.Same(UrgencyCheck.Definition, fromUtf8.OnlyRequest().Definition);
     }
 
     [Fact]
     public async Task JsonStringState_IsSentAsText()
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
 
-        await ((IDecisionClient)fake).EvaluateUtf8Async<UrgencyCheck>("\"plain text\""u8.ToArray());
+        await fake.EvaluateUtf8Async<UrgencyCheck>("\"plain text\""u8.ToArray());
 
         Assert.True(fake.OnlyRequest().State.TryGetString(out var state));
         Assert.Equal("plain text", state);
@@ -98,46 +95,63 @@ public sealed class TypedEvaluationDefaultTests
     [InlineData("1 2")]
     [InlineData("{} {}")]
     [InlineData("  ")]
-    public async Task Utf8_ThatIsNotASingleJsonValue_ThrowsBeforeCallingTheClient(string json)
+    public void Utf8_ThatIsNotASingleJsonValue_ThrowsSynchronously_WithoutCallingTheClient(string json)
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
 
-        var exception = await Assert.ThrowsAsync<ArgumentException>(
-            async () => await ((IDecisionClient)fake).EvaluateUtf8Async<UrgencyCheck>(Encoding.UTF8.GetBytes(json)));
+        var exception = ClientTestKit.ThrowsSynchronously<ArgumentException>(
+            () => fake.EvaluateUtf8Async<UrgencyCheck>(Encoding.UTF8.GetBytes(json)).AsTask());
 
         Assert.Equal("utf8JsonState", exception.ParamName);
         Assert.Empty(fake.Requests);
     }
 
     [Fact]
-    public async Task Utf8_NumberState_ThrowsBeforeCallingTheClient()
+    public void Utf8_NumberState_ThrowsSynchronously_WithoutCallingTheClient()
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
 
-        await Assert.ThrowsAsync<ArgumentException>(
-            async () => await ((IDecisionClient)fake).EvaluateUtf8Async<UrgencyCheck>("42"u8.ToArray()));
+        var exception = ClientTestKit.ThrowsSynchronously<ArgumentException>(
+            () => fake.EvaluateUtf8Async<UrgencyCheck>("42"u8.ToArray()).AsTask());
+
+        Assert.Equal("utf8JsonState", exception.ParamName);
+        Assert.Empty(fake.Requests);
+    }
+
+    [Fact]
+    public void NullString_ThrowsSynchronously()
+    {
+        var fake = Returning("response-noul.json");
+
+        Assert.Equal(
+            "state",
+            ClientTestKit.ThrowsSynchronously<ArgumentNullException>(() => fake.EvaluateAsync<UrgencyCheck>((string)null!).AsTask()).ParamName);
+
+        Assert.Empty(fake.Requests);
+    }
+
+    [Theory]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("null")]
+    public void JsonElement_OfAnotherKind_ThrowsSynchronously(string json)
+    {
+        var fake = Returning("response-noul.json");
+        using var document = JsonDocument.Parse(json);
+
+        Assert.Equal(
+            "state",
+            ClientTestKit.ThrowsSynchronously<ArgumentException>(() => fake.EvaluateAsync<UrgencyCheck>(document.RootElement).AsTask()).ParamName);
 
         Assert.Empty(fake.Requests);
     }
 
     [Fact]
-    public async Task NullString_Throws()
+    public void UndefinedJsonElement_ThrowsSynchronously()
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
-            async () => await ((IDecisionClient)fake).EvaluateAsync<UrgencyCheck>((string)null!));
-
-        Assert.Empty(fake.Requests);
-    }
-
-    [Fact]
-    public async Task UndefinedJsonElement_Throws()
-    {
-        var fake = FakeClient.Returning("response-noul.json");
-
-        await Assert.ThrowsAsync<ArgumentException>(
-            async () => await ((IDecisionClient)fake).EvaluateAsync<UrgencyCheck>(default(JsonElement)));
+        ClientTestKit.ThrowsSynchronously<ArgumentException>(() => fake.EvaluateAsync<UrgencyCheck>(default(JsonElement)).AsTask());
 
         Assert.Empty(fake.Requests);
     }
@@ -145,11 +159,10 @@ public sealed class TypedEvaluationDefaultTests
     [Fact]
     public async Task TypedState_IsSerializedThroughItsTypeInfo()
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
         var ticket = new TicketContext("Payouts failing", "Help! My payouts have been failing for 3 days.");
 
-        var result = await ((IDecisionClient)fake).EvaluateAsync<TicketUrgency, TicketContext>(
-            ticket, TicketContextJsonContext.Default.TicketContext);
+        var result = await fake.EvaluateAsync<TicketUrgency, TicketContext>(ticket, TicketContextJsonContext.Default.TicketContext);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(0.95, result.Value.IsUrgent.Probability);
@@ -157,20 +170,28 @@ public sealed class TypedEvaluationDefaultTests
         Assert.True(request.State.TryGetJson(out var state));
         using var expected = JsonDocument.Parse(JsonSerializer.SerializeToUtf8Bytes(ticket, TicketContextJsonContext.Default.TicketContext));
         Assert.True(JsonElement.DeepEquals(expected.RootElement, state));
-        Assert.Equal(DecisionDefaults.Model, request.Model);
-        AssertQuestionsEqual(SystemOneProtocol.QuestionsJson(TicketUrgency.Definition), request);
+        Assert.Null(request.Model);
+        Assert.Same(TicketUrgency.Definition, request.Definition);
     }
 
     [Fact]
-    public async Task TypedState_NullArguments_Throw()
+    public void TypedState_InvalidArguments_ThrowSynchronously()
     {
-        var fake = FakeClient.Returning("response-noul.json");
+        var fake = Returning("response-noul.json");
         var ticket = new TicketContext("s", "b");
 
-        await Assert.ThrowsAsync<ArgumentNullException>(
-            async () => await ((IDecisionClient)fake).EvaluateAsync<TicketUrgency, TicketContext>(null!, TicketContextJsonContext.Default.TicketContext));
-        await Assert.ThrowsAsync<ArgumentNullException>(
-            async () => await ((IDecisionClient)fake).EvaluateAsync<TicketUrgency, TicketContext>(ticket, null!));
+        Assert.Equal(
+            "state",
+            ClientTestKit.ThrowsSynchronously<ArgumentNullException>(
+                () => fake.EvaluateAsync<TicketUrgency, TicketContext>(null!, TicketContextJsonContext.Default.TicketContext).AsTask()).ParamName);
+        Assert.Equal(
+            "stateTypeInfo",
+            ClientTestKit.ThrowsSynchronously<ArgumentNullException>(
+                () => fake.EvaluateAsync<TicketUrgency, TicketContext>(ticket, null!).AsTask()).ParamName);
+        Assert.Equal(
+            "state",
+            ClientTestKit.ThrowsSynchronously<ArgumentException>(
+                () => fake.EvaluateAsync<NumericUrgency, NumericState>(new NumericState(42), NumericStateJsonContext.Default.NumericState).AsTask()).ParamName);
 
         Assert.Empty(fake.Requests);
     }
@@ -178,8 +199,8 @@ public sealed class TypedEvaluationDefaultTests
     [Fact]
     public async Task ChoiceAndScore_ReturnTypedAnswers()
     {
-        var routing = await ((IDecisionClient)FakeClient.Returning("response-choice.json")).EvaluateAsync<DepartmentRouting>("text");
-        var frustration = await ((IDecisionClient)FakeClient.Returning("response-score.json")).EvaluateAsync<FrustrationCheck>("text");
+        var routing = await Returning("response-choice.json").EvaluateAsync<DepartmentRouting>("text");
+        var frustration = await Returning("response-score.json").EvaluateAsync<FrustrationCheck>("text");
 
         Assert.Equal(Department.Billing, routing.Value.Department.Value);
         Assert.Equal(0.88, routing.Value.Department.Probabilities[Department.Billing]);
@@ -191,7 +212,7 @@ public sealed class TypedEvaluationDefaultTests
     public async Task FailedResponse_ReturnsTheSameError()
     {
         var error = new DecisionError(DecisionErrorKind.RateLimited, "Slow down.") { StatusCode = 429 };
-        IDecisionClient client = new FakeClient(Result<SystemOneResponse, DecisionError>.Failure(error));
+        IDecisionClient client = new ClientTestKit.CapturingClient(failure: error);
 
         var result = await client.EvaluateAsync<UrgencyCheck>("text");
 
@@ -200,83 +221,33 @@ public sealed class TypedEvaluationDefaultTests
     }
 
     [Fact]
-    public async Task AnswersTheParserRejects_GiveInvalidResponse_WithTheJsonException()
+    public async Task AnAsynchronousAnswer_IsMappedWhenItCompletes()
     {
-        IDecisionClient client = FakeClient.Returning("response-choice.json");
+        using var client = new YieldingClient();
+        var set = QuestionSet.CreateBuilder().Noul("is_urgent", "Is this urgent?", out var urgent).Build().Value;
 
-        var result = await client.EvaluateAsync<UrgencyCheck>("text");
+        var typed = await client.EvaluateAsync<UrgencyCheck>("text");
+        var builtSet = await client.EvaluateAsync(set, "text");
 
-        Assert.True(result.IsFailure);
-        Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
-        Assert.IsType<JsonException>(result.Error.Exception);
+        Assert.Equal(0.95, typed.Value.IsUrgent.Probability);
+        Assert.Equal(0.95, builtSet.Value.Get(urgent).Probability);
     }
 
-    [Fact]
-    public async Task ResponseWithNullAnswers_GivesInvalidResponse()
+    private static ClientTestKit.CapturingClient Returning(string fixture) => new(responseJson: Fixture.Text(fixture));
+
+    /// <summary>Answers after a yield, so the extensions take their asynchronous path.</summary>
+    private sealed class YieldingClient : IDecisionClient
     {
-        IDecisionClient client = FakeClient.WithAnswers(null!);
-
-        var result = await client.EvaluateAsync<UrgencyCheck>("text");
-
-        Assert.True(result.IsFailure);
-        Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
-        Assert.IsType<JsonException>(result.Error.Exception);
-    }
-
-    [Fact]
-    public async Task ResponseWithEmptyAnswers_GivesInvalidResponse()
-    {
-        IDecisionClient client = FakeClient.WithAnswers(new Dictionary<string, Answer>(StringComparer.Ordinal));
-
-        var result = await client.EvaluateAsync<UrgencyCheck>("text");
-
-        Assert.True(result.IsFailure);
-        Assert.Equal(DecisionErrorKind.InvalidResponse, result.Error.Kind);
-        Assert.IsType<JsonException>(result.Error.Exception);
-    }
-
-    private static void AssertQuestionsEqual(ReadOnlySpan<byte> expectedQuestions, SystemOneRequest request)
-    {
-        var expected = JsonNode.Parse(expectedQuestions.ToArray());
-        var actual = JsonNode.Parse(JsonSerializer.Serialize(request, DecisionJsonContext.Default.SystemOneRequest))!["questions"];
-        Assert.True(JsonNode.DeepEquals(expected, actual), actual?.ToJsonString());
-    }
-
-    /// <summary>Implements only the two abstract members, so every typed call runs the default interface methods.</summary>
-    private sealed class FakeClient(Result<SystemOneResponse, DecisionError> result) : IDecisionClient
-    {
-        public List<SystemOneRequest> Requests { get; } = [];
-
-        public CancellationToken LastToken { get; private set; }
-
-        public SystemOneRequest OnlyRequest()
+        public async ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
         {
-            // HLQ005 fires on the method name alone: this is xUnit's Assert.Single(IEnumerable), not System.Linq.Enumerable.Single().
-#pragma warning disable HLQ005
-            return Assert.Single(Requests);
-#pragma warning restore HLQ005
+            await Task.Yield();
+            return Result<DecisionResponse, DecisionError>.Success(ClientTestKit.CapturingClient.Canned(request.Definition));
         }
 
-        public static FakeClient Returning(string fixture)
-            => new(Result<SystemOneResponse, DecisionError>.Success(
-                JsonSerializer.Deserialize(Fixture.Text(fixture), DecisionJsonContext.Default.SystemOneResponse)!));
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
 
-        public static FakeClient WithAnswers(IReadOnlyDictionary<string, Answer> answers)
-            => new(Result<SystemOneResponse, DecisionError>.Success(new SystemOneResponse
-            {
-                Model = "jev-1.13.0",
-                Answers = answers,
-                Usage = new DecisionUsage { InputTokens = 1, OutputTokens = 1 },
-            }));
-
-        public ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request, CancellationToken cancellationToken)
+        public void Dispose()
         {
-            Requests.Add(request);
-            LastToken = cancellationToken;
-            return ValueTask.FromResult(result);
         }
-
-        public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
     }
 }

@@ -12,7 +12,7 @@ public sealed class DecisionLogTests
     {
         var logger = new FakeLogger();
 
-        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "m", DecisionProvider.TypeSafe, 1, 2.5);
+        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "m", "TypeSafe", 1, 2.5);
         DecisionLog.EvaluationFailed(logger, DecisionLog.Evaluate, "m", DecisionErrorKind.Server, 500, 2.5, "The API returned HTTP 500.");
         DecisionLog.AttemptRetrying(logger, 1, DecisionErrorKind.Server, 500, null);
         DecisionLog.ModelsListed(logger, DecisionProvider.TypeSafe, 2, 2.5);
@@ -37,11 +37,11 @@ public sealed class DecisionLogTests
     {
         var logger = new FakeLogger();
 
-        DecisionLog.EvaluationSucceeded(logger, DecisionLog.EvaluateBuiltSet, "jev-latest", DecisionProvider.OpenRouter, 4, 2.5);
+        DecisionLog.EvaluationSucceeded(logger, DecisionLog.EvaluateSet, "jev-latest", "openrouter", 4, 2.5);
         var succeeded = logger.LatestRecord;
-        Assert.Equal("evaluate-built-set", LogAssert.Field(succeeded, "Operation"));
+        Assert.Equal("evaluate-set", LogAssert.Field(succeeded, "Operation"));
         Assert.Equal("jev-latest", LogAssert.Field(succeeded, "Model"));
-        Assert.Equal("OpenRouter", LogAssert.Field(succeeded, "Provider"));
+        Assert.Equal("openrouter", LogAssert.Field(succeeded, "Provider"));
         Assert.Equal("4", LogAssert.Field(succeeded, "QuestionCount"));
         Assert.NotNull(LogAssert.Field(succeeded, "DurationMs"));
 
@@ -67,7 +67,7 @@ public sealed class DecisionLogTests
     {
         var logger = new FakeLogger();
 
-        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "jev-latest", DecisionProvider.TypeSafe, 3, 2.5);
+        DecisionLog.EvaluationSucceeded(logger, DecisionLog.Evaluate, "jev-latest", "TypeSafe", 3, 2.5);
 
         var record = logger.LatestRecord;
         Assert.Equal("evaluate", LogAssert.Field(record, "Operation"));
@@ -166,16 +166,16 @@ public sealed class DecisionLogTests
     {
         var logger = new FakeLogger();
 
-        DecisionLog.EvaluationFailed(logger, DecisionLog.EvaluateTyped, "jev-latest", DecisionErrorKind.RateLimited, 429, 12.5, "The API returned HTTP 429.");
+        DecisionLog.EvaluationFailed(logger, DecisionLog.EvaluateSet, "jev-latest", DecisionErrorKind.RateLimited, 429, 12.5, "The API returned HTTP 429.");
 
         var record = logger.LatestRecord;
-        Assert.Equal("evaluate-typed", LogAssert.Field(record, "Operation"));
+        Assert.Equal("evaluate-set", LogAssert.Field(record, "Operation"));
         Assert.Equal("jev-latest", LogAssert.Field(record, "Model"));
         Assert.Equal("RateLimited", LogAssert.Field(record, "ErrorKind"));
         Assert.Equal("429", LogAssert.Field(record, "StatusCode"));
         Assert.Equal(12.5.ToString(CultureInfo.InvariantCulture), LogAssert.Field(record, "DurationMs"));
         Assert.Equal(
-            "Minos evaluate-typed on jev-latest failed with RateLimited, status 429, in 12.5 ms: The API returned HTTP 429.",
+            "Minos evaluate-set on jev-latest failed with RateLimited, status 429, in 12.5 ms: The API returned HTTP 429.",
             record.Message);
         Assert.Equal("The API returned HTTP 429.", LogAssert.Field(record, "ErrorMessage"));
         Assert.Equal(

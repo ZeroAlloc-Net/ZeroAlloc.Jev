@@ -62,7 +62,7 @@ key comes from configuration, such as user secrets, so it is never written into 
 <!-- snippet: DependencyInjection_Register -->
 ```cs
 // The key is read from configuration, such as user secrets, and never written into the code.
-public static IHttpClientBuilder AddDecision(IHostApplicationBuilder builder)
+public static DecisionClientServiceBuilder AddDecision(IHostApplicationBuilder builder)
 {
     builder.Services.AddSingleton<InboxTriage>();
     return builder.Services.AddDecisionClient(options => options.ApiKey = builder.Configuration["TypeSafe:ApiKey"]);
@@ -71,8 +71,12 @@ public static IHttpClientBuilder AddDecision(IHostApplicationBuilder builder)
 <!-- endSnippet -->
 
 After that, the container builds an `InboxTriage` with the shared client whenever one is needed, and calls
-`TriageAsync` as before. `AddDecisionClient` returns the `IHttpClientBuilder` of the client's `HttpClient`, which is where
-handlers are added. [Below](#the-httpclient-from-the-factory) covers that.
+`TriageAsync` as before.
+
+`AddDecisionClient` returns a `DecisionClientServiceBuilder`, the registration's pipeline builder. Its `HttpClient`
+property is the `IHttpClientBuilder` of the client's `HttpClient`, which is where handlers are added, as
+[below](#the-httpclient-from-the-factory) shows. Its `Use` methods add stages around the client, as
+[The client pipeline](pipeline.md#with-dependency-injection) shows.
 
 ## The six overloads
 
@@ -242,11 +246,12 @@ Some things still need valid options, an API key included:
 
 ## What gets registered
 
-- **One singleton per registration.** It reads its named options once, when the container first builds it. The default
-  client reads the default options, and a keyed client reads the options named by its key. The client logs through the
-  container's `ILoggerFactory`, as [Logging, traces and metrics](observability.md#logging) describes.
-- **A repeat call for the same name** adds its delegate, and the delegates run in order. It does not register a second
-  client.
+- **One singleton per registration.** It is a `DecisionClient`, wrapped in any stages you added to the registration's
+  builder, and is built once, when the container first resolves it. The client reads its named options then. The
+  default client reads the default options, and a keyed client reads the options named by its key. The client logs
+  through the container's `ILoggerFactory`, as [Logging, traces and metrics](observability.md#logging) describes.
+- **A repeat call for the same name** adds its delegate, and the delegates run in order. It returns the same builder,
+  so stages from either call land on one pipeline, and it does not register a second client.
 - **Your own registration wins.** `AddDecisionClient` registers the client with `TryAdd`, so an `IDecisionClient` you registered
   first stays. `AddDecisionClient` still sets up the named `HttpClient` and the options in that case.
 - **Disposal.** The container disposes the client with the provider. The `HttpClient` belongs to the factory and is left
@@ -261,9 +266,9 @@ the key for a keyed client. You rarely need the name, except to change what is b
   change in DNS is picked up. The factory never rotates it, because the singleton keeps its `HttpClient` for life.
 - **Its settings.** `DecisionClient.ConfigureHttpClient` gives the `HttpClient` its base address, the per-attempt `Timeout`
   and the `Minos.NET` User-Agent.
-- **Its handlers.** Add your own through the builder `AddDecisionClient` returns. A handler sees every request and every
-  retry. `ConfigureHttpClientDefaults` adds a handler to every `HttpClient` the factory makes, the Minos clients
-  included, whether you call it before or after `AddDecisionClient`.
+- **Its handlers.** Add your own through the `HttpClient` property of the builder `AddDecisionClient` returns. A
+  handler sees every request and every retry. `ConfigureHttpClientDefaults` adds a handler to every `HttpClient` the
+  factory makes, the Minos clients included, whether you call it before or after `AddDecisionClient`.
 
 <!-- snippet: DependencyInjection_Handlers -->
 ```cs
@@ -279,13 +284,14 @@ public sealed class TraceHeaderHandler : DelegatingHandler
 
 public static class HandlerRegistration
 {
-    // AddDecisionClient returns the builder of the client's HttpClient, so handlers are added the usual way.
+    // The HttpClient property of the builder AddDecisionClient returns is the client's HttpClient builder, so handlers
+    // are added the usual way.
     public static IHttpClientBuilder AddTracedDecision(IServiceCollection services, string apiKey)
     {
         services.AddTransient<TraceHeaderHandler>();
         return services
             .AddDecisionClient(options => options.ApiKey = apiKey)
-            .AddHttpMessageHandler<TraceHeaderHandler>();
+            .HttpClient.AddHttpMessageHandler<TraceHeaderHandler>();
     }
 
     // ConfigureHttpClientDefaults adds a handler to every HttpClient the factory makes, the Minos clients included.
@@ -304,7 +310,7 @@ public static class HandlerRegistration
         services.ConfigureHttpClientDefaults(defaults => defaults.AddHttpMessageHandler<TraceHeaderHandler>());
         return services
             .AddDecisionClient(options => options.ApiKey = apiKey)
-            .ConfigureAdditionalHttpMessageHandlers((handlers, _) => handlers.Clear());
+            .HttpClient.ConfigureAdditionalHttpMessageHandlers((handlers, _) => handlers.Clear());
     }
 
     // When a handler of yours retries, such as a standard resilience handler, turn the client's own retries off,
@@ -342,8 +348,8 @@ with `ConfigureAdditionalHttpMessageHandlers`, after the `Clear()`, if you want 
 
 The factory has request logs of its own, with the categories `System.Net.Http.HttpClient.*`. They are turned off for
 the Minos clients. The client already logs each operation and each retried attempt, in the `Minos.DecisionClient`
-category, and the factory's logging handlers add work to every request. Call `AddDefaultLogger()` on the builder
-`AddDecisionClient` returns to bring the factory's logs back.
+category, and the factory's logging handlers add work to every request. Call `AddDefaultLogger()` on the `HttpClient`
+property of the builder `AddDecisionClient` returns to bring the factory's logs back.
 
 Without a logging provider, or with the Minos log levels turned off, the client logs nothing. [Logging, traces and
 metrics](observability.md#logging) lists the events and their levels.
@@ -378,6 +384,7 @@ the handler.
 
 ## Next
 
+- [The client pipeline](pipeline.md): the stages around a registered client, and how to add your own.
 - [Logging, traces and metrics](observability.md): what a registered client reports about each call.
 - [Client and errors](client-and-errors.md): the options a registration sets, and every `DecisionError`.
 - [Typed evaluation](typed-evaluation.md): the calls a resolved client makes.

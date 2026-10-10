@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Text.Json;
 using Minos.Serialization;
 using Minos.Transport;
+using ZeroAlloc.Results;
 
 namespace Minos.Protocols;
 
@@ -29,6 +30,14 @@ internal sealed class SystemOneProtocol : IDecisionProtocol
     public RawJson WriteRequest<TArg>(QuestionSetDefinition definition, TArg state, int stateSizeHint, StateWriter<TArg> writeState, string model, ArrayPool<byte> pool)
         where TArg : allows ref struct
         => SystemOneRequestWriter.Write(QuestionsJson(definition), state, stateSizeHint, writeState, model, pool);
+
+    public string EndpointPath => "v1/systemone";
+
+    public Result<DecisionResponse, DecisionError> ReadResponse(ReadOnlySpan<byte> body, QuestionSetDefinition definition)
+        => SystemOneResponseReader.Read(this, body, definition);
+
+    public DecisionError MapError(int statusCode, ReadOnlySpan<byte> body, bool bodyTruncated, string? contentType, TimeSpan? retryAfter)
+        => SystemOneErrors.Map(statusCode, body, bodyTruncated, contentType, retryAfter);
 
     public TResult ReadAnswers<TResult>(ref Utf8JsonReader answers, QuestionSetDefinition definition, AnswerFactory<TResult> create)
     {

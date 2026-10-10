@@ -1,7 +1,7 @@
 ---
 id: samples
 title: Samples
-sidebar_position: 12
+sidebar_position: 13
 description: Three runnable cookbook samples that replay recorded Jev answers offline, how to run, record and trust them.
 ---
 

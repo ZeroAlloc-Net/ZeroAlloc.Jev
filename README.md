@@ -81,6 +81,7 @@ The guide lives at [marcelroozekrans.github.io/Minos.NET](https://marcelroozekra
 - [Question sets at run time](https://marcelroozekrans.github.io/Minos.NET/question-sets-at-run-time): build a question set from data with the builder, evaluate it, and read answers through handles.
 - [The client and its errors](https://marcelroozekrans.github.io/Minos.NET/client-and-errors): create and configure a `DecisionClient`, its retries and time-outs, every kind of `DecisionError`, and the raw request API.
 - [Dependency injection](https://marcelroozekrans.github.io/Minos.NET/dependency-injection): register `IDecisionClient` in a .NET host, key several clients, and bind options from configuration.
+- [The client pipeline](https://marcelroozekrans.github.io/Minos.NET/pipeline): the stages every call goes through, building your own pipeline, writing a stage, and upgrading from 0.7.
 - [Logging, traces and metrics](https://marcelroozekrans.github.io/Minos.NET/observability): what the client logs, which spans and metrics it emits, and what it never records.
 - [Native AOT and allocations](https://marcelroozekrans.github.io/Minos.NET/native-aot): what Native AOT compatibility means, the one reflection the client uses, and the allocation budgets that guard it.
 - [Diagnostics](https://marcelroozekrans.github.io/Minos.NET/diagnostics): every MIN analyzer rule with its severity, the two code fixes, and how to suppress a rule.

@@ -20,7 +20,7 @@ public sealed class TestingYourCodeTests
     }
 
     [Fact]
-    public async Task ATwoWordOption_IsKeyedInSnakeCase_ByTheFake()
+    public async Task AChoiceAnswer_IsReadByOptionPosition_FromTheFake()
     {
         IDecisionClient client = FakeDecision.Answering(0.1, TriageDesk.ProductTeam, 0.9);
 
@@ -28,6 +28,30 @@ public sealed class TestingYourCodeTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(TriageDesk.ProductTeam, result.Value.Desk.Value);
+        Assert.Equal(0.9, result.Value.Desk.Confidence);
+    }
+
+    [Fact]
+    public async Task AResponseBuiltForTheAskedDefinition_IsReadThroughABuiltSet()
+    {
+        var set = QuestionSet.CreateBuilder().Noul("is_urgent", "Is this urgent?", out var urgent).Build().Value;
+        IDecisionClient client = new FakeDecision(ZeroAlloc.Results.Result<DecisionResponse, DecisionError>.Success(
+            new DecisionResponse(set.Definition, [QuestionAnswer.Noul(0.9)])));
+
+        var result = await client.EvaluateAsync(set, "text");
+
+        Assert.True(result.Value.Get(urgent).Value);
+    }
+
+    [Fact]
+    public async Task AResponseForAnotherDefinition_Throws()
+    {
+        var set = QuestionSet.CreateBuilder().Noul("is_urgent", "Is this urgent?", out _).Build().Value;
+        var other = QuestionSet.CreateBuilder().Noul("is_urgent", "Is this urgent?", out _).Build().Value;
+        IDecisionClient client = new FakeDecision(ZeroAlloc.Results.Result<DecisionResponse, DecisionError>.Success(
+            new DecisionResponse(other.Definition, [QuestionAnswer.Noul(0.9)])));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await client.EvaluateAsync(set, "text"));
     }
 
     [Fact]

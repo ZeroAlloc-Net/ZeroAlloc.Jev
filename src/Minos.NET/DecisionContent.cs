@@ -13,23 +13,32 @@ namespace Minos;
 [JsonConverter(typeof(DecisionContentConverter))]
 public readonly struct DecisionContent : IEquatable<DecisionContent>
 {
-    private readonly string? _text;
+    // Text as a string, or a caller's UTF-8 JSON state as a byte[] copy the content owns. Null for structured JSON,
+    // which is in _json, and for uninitialized content. Sharing one field keeps the struct, which every
+    // DecisionRequest carries, at its size.
+    private readonly object? _value;
     private readonly JsonElement _json;
 
     private DecisionContent(string text)
     {
-        _text = text;
+        _value = text;
         _json = default;
     }
 
     private DecisionContent(JsonElement json)
     {
-        _text = null;
+        _value = null;
         _json = json;
     }
 
+    private DecisionContent(object utf8State)
+    {
+        _value = utf8State;
+        _json = default;
+    }
+
     /// <summary>Gets a value indicating whether this content is plain text.</summary>
-    public bool IsString => _text is not null;
+    public bool IsString => _value is string || (TryGetUtf8State(out var utf8) && IsJsonString(utf8));
 
     /// <summary>Creates text content.</summary>
     /// <param name="text">The text.</param>
@@ -90,6 +99,31 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
         return FromDetached(JsonElement.ParseValue(ref reader), paramName);
     }
 
+    /// <summary>
+    /// Copies a caller's UTF-8 JSON state into an array the content owns, so the request writer sends its bytes
+    /// unchanged on every attempt and the caller may reuse its buffer as soon as the call returns. The caller has
+    /// already checked it with <see cref="TypedEvaluation.EnsureStateJson"/>.
+    /// </summary>
+    /// <param name="utf8Json">One JSON string, object or array.</param>
+    /// <returns>The content.</returns>
+    internal static DecisionContent FromCheckedUtf8State(ReadOnlySpan<byte> utf8Json)
+        => new((object)utf8Json.ToArray());
+
+    /// <summary>Gets the copied UTF-8 JSON, when this content is a state from <see cref="FromCheckedUtf8State"/>.</summary>
+    /// <param name="utf8Json">The bytes as the caller wrote them, or empty.</param>
+    /// <returns><see langword="true"/> when this content holds a caller's UTF-8 JSON.</returns>
+    internal bool TryGetUtf8State(out ReadOnlySpan<byte> utf8Json)
+    {
+        if (_value is byte[] array)
+        {
+            utf8Json = array;
+            return true;
+        }
+
+        utf8Json = default;
+        return false;
+    }
+
     /// <summary>Wraps an element that already owns its document, with no second copy.</summary>
     private static DecisionContent FromDetached(JsonElement json, string paramName) => json.ValueKind switch
     {
@@ -148,7 +182,7 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
     /// <exception cref="ArgumentException"><paramref name="content"/> is <see langword="default"/>.</exception>
     internal static void EnsureInitialized(DecisionContent content, string paramName)
     {
-        if (content._text is null && content._json.ValueKind == JsonValueKind.Undefined)
+        if (content._value is null && content._json.ValueKind == JsonValueKind.Undefined)
         {
             throw new ArgumentException(
                 "The content is uninitialized: create it with FromString, FromJson, FromValue or FromUtf8Json.", paramName);
@@ -160,7 +194,7 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
     /// <returns><see langword="true"/> when this content is plain text.</returns>
     public bool TryGetString([NotNullWhen(true)] out string? text)
     {
-        text = _text;
+        text = Resolve()._value as string;
         return text is not null;
     }
 
@@ -169,20 +203,23 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
     /// <returns><see langword="true"/> when this content is structured JSON.</returns>
     public bool TryGetJson(out JsonElement json)
     {
-        json = _json;
-        return _text is null && json.ValueKind != JsonValueKind.Undefined;
+        var content = Resolve();
+        json = content._json;
+        return content._value is null && json.ValueKind != JsonValueKind.Undefined;
     }
 
     /// <inheritdoc />
     public bool Equals(DecisionContent other)
     {
-        if (_text is not null || other._text is not null)
+        var content = Resolve();
+        var otherContent = other.Resolve();
+        if (content._value is not null || otherContent._value is not null)
         {
-            return string.Equals(_text, other._text, StringComparison.Ordinal);
+            return string.Equals(content._value as string, otherContent._value as string, StringComparison.Ordinal);
         }
 
-        var json = _json;
-        var otherJson = other._json;
+        var json = content._json;
+        var otherJson = otherContent._json;
         if (json.ValueKind == JsonValueKind.Undefined || otherJson.ValueKind == JsonValueKind.Undefined)
         {
             return json.ValueKind == otherJson.ValueKind;
@@ -197,12 +234,13 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
     /// <inheritdoc />
     public override int GetHashCode()
     {
-        if (_text is not null)
+        var content = Resolve();
+        if (content._value is string text)
         {
-            return StringComparer.Ordinal.GetHashCode(_text);
+            return StringComparer.Ordinal.GetHashCode(text);
         }
 
-        var json = _json;
+        var json = content._json;
         return json.ValueKind.GetHashCode();
     }
 
@@ -210,12 +248,32 @@ public readonly struct DecisionContent : IEquatable<DecisionContent>
     /// <returns>The text or raw JSON; empty for uninitialized content.</returns>
     public override string ToString()
     {
-        if (_text is not null)
+        var content = Resolve();
+        if (content._value is string text)
         {
-            return _text;
+            return text;
         }
 
-        var json = _json;
+        var json = content._json;
         return json.ValueKind == JsonValueKind.Undefined ? string.Empty : json.GetRawText();
+    }
+
+    private static bool IsJsonString(ReadOnlySpan<byte> utf8Json)
+    {
+        var reader = new Utf8JsonReader(utf8Json);
+        return reader.Read() && reader.TokenType == JsonTokenType.String;
+    }
+
+    // A caller's UTF-8 state as the text or JSON FromUtf8Json would have made of it, parsed each time a public member
+    // needs it; any other content as itself.
+    private DecisionContent Resolve()
+    {
+        if (!TryGetUtf8State(out var utf8))
+        {
+            return this;
+        }
+
+        var reader = new Utf8JsonReader(utf8);
+        return FromDetached(JsonElement.ParseValue(ref reader), nameof(utf8));
     }
 }
