@@ -290,15 +290,15 @@ retries, and a hand-written fake in a test answers it by implementing that one c
 Inside a `DecisionClient`, the protocol writes the request from the definition into pooled buffers, and caches the
 questions JSON of each set after the first call.
 
-Each overload sends its state as it did before the [pipeline](pipeline.md). `EvaluateUtf8Async<T>` copies your bytes
-into the request as they are, with their whitespace and escapes, and parses nothing. The `JsonElement` overload writes
-your element without copying it first. Both read your state until the returned task completes, because a retry writes
-the request again, so don't change the bytes or dispose the document before then. `EvaluateAsync<T, TState>`
-serializes the state once per call, with the request's own writer settings, so the request carries the bytes your
-`JsonTypeInfo<TState>` writes, escaped as the request escapes them. That costs the serialized bytes and the writer,
-about 290 B for the smoke application's state under Native AOT, and
-[Performance](performance.md#phase-63--the-client-pipeline) has the figures. The other overloads add nothing for an
-object, an array or text.
+Each overload sends the same request as before the [pipeline](pipeline.md). `EvaluateUtf8Async<T>` copies your bytes
+into the request as they are, with their whitespace and escapes, and parses nothing. It reads your memory until the
+returned task completes, because a retry writes the request again, so don't change the bytes before then. The
+`JsonElement` overload clones your element once per call, so you may dispose its document as soon as the call
+returns; the clone is 304 B for a one-message chat log. `EvaluateAsync<T, TState>` serializes the state once per call,
+with the request's own writer settings, so the request carries the bytes your `JsonTypeInfo<TState>` writes, escaped as
+the request escapes them. That costs the serialized bytes and the writer, about 290 B for the smoke application's state
+under Native AOT, and [Performance](performance.md#phase-63--the-client-pipeline) has the figures. The text overload
+adds nothing for its state, and neither does the UTF-8 overload when its memory is a whole array.
 
 ## DecisionContent
 

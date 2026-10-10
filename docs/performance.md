@@ -377,7 +377,10 @@ What each one allocates:
 - **The typed state** costs the transport's request and response, the `DecisionResponse`, the result record, and the
   serialized state: the `Utf8JsonWriter` and pooled `RawJson` it is written through, and the array of its bytes the
   request keeps. It measured 3008 B while the state was a `JsonDocument` from `DecisionContent.FromValue`, which
-  rewrote a converter's raw JSON. The text and `JsonElement` overloads do not serialize their state.
+  rewrote a converter's raw JSON.
+- **The `JsonElement` state** costs one clone of the element per call, so you may dispose its document as soon as the
+  call returns: 304 B for a one-message chat log in the unit suite. No AOT gate covers this overload. The text overload
+  adds nothing for its state.
 
 The existing gates over the typed and built-set paths now include the `DecisionRequest`, the `DecisionResponse` and its
 `AnswerSlot[]`. A typed call measures 3424 B, against 2984 B before the pipeline, and a built-set call 3616 B, against
