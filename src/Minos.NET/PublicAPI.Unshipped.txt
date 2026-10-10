@@ -132,3 +132,19 @@ static Minos.DecisionClientExtensions.GetService<TService>(this Minos.IDecisionC
 *REMOVED*Minos.IDecisionClient.EvaluateAsync<T>(string! state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>
 *REMOVED*Minos.IDecisionClient.EvaluateUtf8Async<T>(System.ReadOnlyMemory<byte> utf8JsonState, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<T, Minos.DecisionError!>>
 *REMOVED*Minos.IDecisionClient.ListModelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.ModelList!, Minos.DecisionError!>>
+Minos.DelegatingDecisionClient
+Minos.DelegatingDecisionClient.DelegatingDecisionClient(Minos.IDecisionClient! innerClient) -> void
+Minos.DelegatingDecisionClient.InnerClient.get -> Minos.IDecisionClient!
+virtual Minos.DelegatingDecisionClient.EvaluateAsync(Minos.DecisionRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.DecisionResponse!, Minos.DecisionError!>>
+virtual Minos.DelegatingDecisionClient.GetService(System.Type! serviceType, object? serviceKey = null) -> object?
+Minos.DelegatingDecisionClient.Dispose() -> void
+virtual Minos.DelegatingDecisionClient.Dispose(bool disposing) -> void
+Minos.DecisionClientBuilder
+Minos.DecisionClientBuilder.DecisionClientBuilder(Minos.IDecisionClient! innerClient) -> void
+Minos.DecisionClientBuilder.DecisionClientBuilder(System.Func<System.IServiceProvider!, Minos.IDecisionClient!>! innerClientFactory) -> void
+Minos.DecisionClientBuilder.Use(System.Func<Minos.IDecisionClient!, Minos.IDecisionClient!>! stageFactory) -> Minos.DecisionClientBuilder!
+Minos.DecisionClientBuilder.Use(System.Func<Minos.IDecisionClient!, System.IServiceProvider!, Minos.IDecisionClient!>! stageFactory) -> Minos.DecisionClientBuilder!
+Minos.DecisionClientBuilder.Use(System.Func<Minos.DecisionRequest!, Minos.IDecisionClient!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<ZeroAlloc.Results.Result<Minos.DecisionResponse!, Minos.DecisionError!>>>! evaluate) -> Minos.DecisionClientBuilder!
+Minos.DecisionClientBuilder.Build(System.IServiceProvider? services = null) -> Minos.IDecisionClient!
+Minos.DecisionClientBuilderExtensions
+static Minos.DecisionClientBuilderExtensions.AsBuilder(this Minos.IDecisionClient! innerClient) -> Minos.DecisionClientBuilder!

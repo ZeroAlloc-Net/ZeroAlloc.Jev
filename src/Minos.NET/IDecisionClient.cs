@@ -2,7 +2,7 @@ using ZeroAlloc.Results;
 
 namespace Minos;
 
-/// <summary>Asks a decision provider a question set's questions about a state. <see cref="DecisionClient"/> implements it over HTTP; stages derive from <c>DelegatingDecisionClient</c>.</summary>
+/// <summary>Asks a decision provider a question set's questions about a state. <see cref="DecisionClient"/> implements it over HTTP; stages derive from <see cref="DelegatingDecisionClient"/>.</summary>
 /// <remarks>
 /// The typed <c>EvaluateAsync&lt;T&gt;</c> calls and the <see cref="QuestionSet"/> calls are extension methods in
 /// <see cref="DecisionClientExtensions"/>, so they work over any implementation, a test fake included. A fake implements
