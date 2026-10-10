@@ -14,7 +14,9 @@ namespace Minos;
 /// <summary>Calls TypeSafe's Jev System One API, directly or through OpenRouter.</summary>
 /// <remarks>
 /// Thread-safe. Create one per application and reuse it; dispose it when the application stops. Pass an
-/// <see cref="ILoggerFactory"/> to log each operation, each retried attempt and each unexpected exception. What the
+/// <see cref="ILoggerFactory"/> to log each operation, each retried attempt and each unexpected exception; a neutral
+/// <see cref="EvaluateAsync(DecisionRequest, CancellationToken)"/> call is logged only with
+/// <see cref="DecisionClientOptions.UseStandardPipeline"/>, while the raw System One calls are logged either way. What the
 /// library writes never contains the state, questions, answers, API key, a header value or an error response body; the
 /// unexpected-exception event carries the exception as thrown, which can include one from your own handler.
 /// Spans and metrics come from the Minos ActivitySource and Meter; see the

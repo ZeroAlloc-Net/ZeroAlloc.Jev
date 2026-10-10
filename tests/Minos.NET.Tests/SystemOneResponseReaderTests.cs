@@ -196,6 +196,58 @@ public sealed class SystemOneResponseReaderTests
         Assert.IsAssignableFrom<System.Text.Json.JsonException>(result.Error.Exception);
     }
 
+    // Moved from EvaluatedTests with Evaluated: the envelope reader keeps its lenient usage reads.
+    [Fact]
+    public void Token_counts_outside_the_int32_range_are_absent()
+    {
+        var response = SystemOneProtocol.Instance.ReadResponse(
+            """{"answers":{"is_urgent":{"type":"noul","noul":0.5}},"usage":{"input_tokens":3000000000,"output_tokens":3000000000}}"""u8, Urgency).Value;
+
+        Assert.Null(response.InputTokens);
+        Assert.Null(response.OutputTokens);
+        Assert.Null(response.Usage);
+    }
+
+    [Fact]
+    public void String_or_null_token_counts_are_absent()
+    {
+        var response = SystemOneProtocol.Instance.ReadResponse(
+            """{"answers":{"is_urgent":{"type":"noul","noul":0.5}},"usage":{"input_tokens":"7","output_tokens":null}}"""u8, Urgency).Value;
+
+        Assert.Null(response.InputTokens);
+        Assert.Null(response.OutputTokens);
+        Assert.Null(response.Usage);
+    }
+
+    [Theory]
+    [InlineData("""{"model":"m-1","usage":{"input_tokens":7,"output_tokens":3},"answers":{"is_urgent":{"type":"noul","noul":0.5}}}""")]
+    [InlineData("""{"answers":{"is_urgent":{"type":"noul","noul":0.5}},"model":"m-1","usage":{"input_tokens":7,"output_tokens":3}}""")]
+    [InlineData("""{"model":"m-1","answers":{"is_urgent":{"type":"noul","noul":0.5}},"usage":{"output_tokens":3,"input_tokens":7}}""")]
+    public void Model_and_usage_are_read_wherever_they_are(string json)
+    {
+        var response = SystemOneProtocol.Instance.ReadResponse(System.Text.Encoding.UTF8.GetBytes(json), Urgency).Value;
+
+        Assert.Equal("m-1", response.Model);
+        Assert.Equal(7, response.Usage!.InputTokens);
+        Assert.Equal(3, response.Usage.OutputTokens);
+    }
+
+    [Fact]
+    public void A_confidence_key_inside_an_answer_is_not_its_confidence_and_confidences_enumerate_twice()
+    {
+        var definition = new QuestionSetDefinition(QuestionDefinition.Choice(
+            "a",
+            DecisionContent.FromString("Which?"),
+            new OptionDefinition("confidence", null),
+            new OptionDefinition("other", null)));
+        var response = SystemOneProtocol.Instance.ReadResponse(
+            """{"answers":{"a":{"type":"choice","choice":"confidence","probabilities":{"confidence":0.3,"other":0.7},"confidence":0.6}}}"""u8,
+            definition).Value;
+
+        Assert.Equal([0.6], Confidences(response));
+        Assert.Equal([0.6], Confidences(response));
+    }
+
     [Fact]
     public void A_string_equal_to_the_cached_one_is_returned_as_that_string()
     {
@@ -250,6 +302,17 @@ public sealed class SystemOneResponseReaderTests
             Assert.Equal(direct.Slots, neutral.Value.Slots);
             Assert.Equal(direct.Probabilities, neutral.Value.Probabilities);
         }
+    }
+
+    private static List<double> Confidences(DecisionResponse response)
+    {
+        var values = new List<double>();
+        foreach (var confidence in response.Confidences)
+        {
+            values.Add(confidence);
+        }
+
+        return values;
     }
 
     private static string? ReadCached(ReadOnlySpan<byte> json, ref string? cache)

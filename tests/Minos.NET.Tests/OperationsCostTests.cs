@@ -7,6 +7,10 @@ using ZeroAlloc.TestHelpers;
 namespace Minos.Tests;
 
 /// <summary>What the instrumented proxies cost with nothing listening.</summary>
+/// <remarks>
+/// The cost of an asynchronously completing typed call with telemetry off is checked only in the published AOT smoke app,
+/// by <c>AllocationChecks.TelemetryOffAsynchronousTypedEvaluation</c>, not by <c>dotnet test</c>.
+/// </remarks>
 [Collection(TelemetryListeners.Name)]
 public sealed class OperationsCostTests
 {

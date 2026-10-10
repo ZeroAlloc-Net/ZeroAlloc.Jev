@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Minos.Serialization;
 using Minos.Telemetry;
 using Minos.Transport;
@@ -85,6 +86,25 @@ public sealed class DecisionOperationsTests
         Assert.True((await operations.ListModelsAsync("typesafe", Endpoint, CancellationToken.None)).IsSuccess);
 
         Assert.Equal([null, 1, null, 1], api.RetryCounts);
+    }
+
+    // Moved from LoggingDecisionApiTests.EveryMethod_IsObserved: both raw calls log each attempt they retry.
+    [Fact]
+    public async Task Each_raw_call_logs_the_attempt_it_retries()
+    {
+        using var logs = new LogCapture();
+        var retry = new DecisionRetry(
+            new DecisionRetryOptions { MaxRetries = 1, InitialBackoff = TimeSpan.FromMilliseconds(1) },
+            logs.Factory.CreateLogger(DecisionLog.Category),
+            TimeProvider.System,
+            static () => false);
+        var operations = new DecisionOperations(new FailingOnceApi(), "Bearer k", retry, static () => false);
+
+        await operations.EvaluateAsync(Request, "typesafe", Endpoint, CancellationToken.None);
+        await operations.ListModelsAsync("typesafe", Endpoint, CancellationToken.None);
+
+        Assert.Equal([1003, 1003], logs.EventIds);
+        Assert.All(logs.Records, record => Assert.Equal("Overloaded", LogAssert.Field(record, "ErrorKind")));
     }
 
     [Fact]

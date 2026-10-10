@@ -108,11 +108,11 @@ public sealed class DecisionResponse
     public string? Model { get; }
 
     /// <summary>Gets the token usage, or <see langword="null"/> when the provider did not report both token counts.</summary>
-    /// <remarks>A read response creates it on first access, so a call that never reads it does not allocate it.</remarks>
-    public DecisionUsage? Usage
-        => _usage ??= InputTokens is { } input && OutputTokens is { } output
-            ? new DecisionUsage { InputTokens = input, OutputTokens = output, Cost = Cost }
-            : null;
+    /// <remarks>
+    /// A read response creates it on first access, so a call that never reads it does not allocate it. Every access
+    /// returns the same instance, even when threads race on the first one.
+    /// </remarks>
+    public DecisionUsage? Usage => _usage ?? CreateUsage();
 
     /// <summary>Gets the provider's response id, if any.</summary>
     public string? Id { get; }
@@ -132,6 +132,18 @@ public sealed class DecisionResponse
     internal double? Cost { get; }
 
     internal SlotConfidences Confidences => new(this);
+
+    // Publishes one instance: a thread that loses the race returns the winner's.
+    private DecisionUsage? CreateUsage()
+    {
+        if (InputTokens is not { } input || OutputTokens is not { } output)
+        {
+            return null;
+        }
+
+        var usage = new DecisionUsage { InputTokens = input, OutputTokens = output, Cost = Cost };
+        return Interlocked.CompareExchange(ref _usage, usage, null) ?? usage;
+    }
 
     internal AnswerSlots ToAnswerSlots() => new(Slots, Probabilities, Definition, Slots);
 

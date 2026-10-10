@@ -14,14 +14,15 @@ internal static class SystemOneResponseReader
     private static readonly AnswerFactory<(AnswerSlot[] Slots, double[] Probabilities)> Capture
         = static slots => (slots.HeapSlots ?? slots.Slots.ToArray(), slots.Probabilities);
 
-    // Utf8JsonReader treats a leading UTF-8 BOM as an invalid start of a value, while the raw path's stream-based
-    // deserializer skips one; a body read here must match that tolerance.
-    // The last model and provider read. A client meets few distinct values, so one that matches the last is returned as
-    // that same string instead of a new one per response. A race only replaces the cached value; any string returned
-    // equals the bytes read.
+    // The last model and provider read, shared by the whole process: an allocation cut that keeps the typed call within
+    // its AOT gate. A client meets few distinct values, so a value that matches the last one is returned as that same
+    // string instead of a new one per response. A race only replaces the cached value; any string returned equals the
+    // bytes read.
     private static string? lastModel;
     private static string? lastProvider;
 
+    // Utf8JsonReader treats a leading UTF-8 BOM as an invalid start of a value, while the raw path's stream-based
+    // deserializer skips one; a body read here must match that tolerance.
     private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];
 
     public static Result<DecisionResponse, DecisionError> Read(SystemOneProtocol protocol, ReadOnlySpan<byte> body, QuestionSetDefinition definition)

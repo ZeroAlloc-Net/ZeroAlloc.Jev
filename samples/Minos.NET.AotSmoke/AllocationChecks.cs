@@ -640,6 +640,7 @@ internal static class AllocationChecks
     /// <summary>
     /// A typed evaluation that completes asynchronously, with nothing listening: the one place telemetry adds bytes when
     /// off, the stages' state machines. The canned-handler gates complete synchronously and cannot see it.
+    /// It replaced OperationsCostTests' in-process unwrap check, so <c>dotnet test</c> has no counterpart.
     /// </summary>
     public static async Task TelemetryOffAsynchronousTypedEvaluation()
     {
