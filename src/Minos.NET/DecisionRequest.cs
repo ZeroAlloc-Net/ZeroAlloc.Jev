@@ -26,12 +26,6 @@ public sealed record DecisionRequest
     public QuestionSetDefinition Definition { get; }
 
     /// <summary>Gets the state the questions are about.</summary>
-    /// <remarks>
-    /// The typed <c>JsonElement</c> and UTF-8 overloads of <see cref="DecisionClientExtensions"/> do not copy their state:
-    /// it reads the caller's document or bytes, which stay valid only until that call completes. A stage that keeps the
-    /// request longer should keep a copy of the state, such as one from <see cref="DecisionContent.FromString"/> or
-    /// <see cref="DecisionContent.FromJson"/>.
-    /// </remarks>
     public DecisionContent State { get; }
 
     /// <summary>Gets the model to ask, or <see langword="null"/> for the transport's configured model.</summary>

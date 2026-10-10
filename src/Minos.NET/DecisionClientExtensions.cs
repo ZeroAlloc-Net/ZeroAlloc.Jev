@@ -56,10 +56,7 @@ public static class DecisionClientExtensions
     /// <summary>Asks <typeparamref name="T"/>'s questions about a JSON state and returns its typed answers.</summary>
     /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
     /// <param name="client">The client to ask.</param>
-    /// <param name="state">
-    /// The state: a JSON string is sent as text; an object or array as structured content, read from its document until
-    /// the returned task completes, so do not dispose the document before then.
-    /// </param>
+    /// <param name="state">The state: a JSON string is sent as text; an object or array as structured content.</param>
     /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
     /// <remarks>Calls <see cref="EvaluateAsync{T}(IDecisionClient, JsonElement, CancellationToken)"/> without cancellation.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
@@ -72,10 +69,7 @@ public static class DecisionClientExtensions
     /// <summary>Asks <typeparamref name="T"/>'s questions about a JSON state and returns its typed answers.</summary>
     /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
     /// <param name="client">The client to ask.</param>
-    /// <param name="state">
-    /// The state: a JSON string is sent as text; an object or array, such as records or a chat log, as structured content,
-    /// read from its document until the returned task completes, so do not dispose the document before then.
-    /// </param>
+    /// <param name="state">The state: a JSON string is sent as text; an object or array, such as records or a chat log, as structured content.</param>
     /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
     /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
@@ -86,7 +80,7 @@ public static class DecisionClientExtensions
     {
         ArgumentNullException.ThrowIfNull(client);
         TypedEvaluation.EnsureStateKind(state.ValueKind, nameof(state));
-        return Typed<T>(client, DecisionContent.FromCheckedJsonState(state), cancellationToken);
+        return Typed<T>(client, DecisionContent.FromJson(state), cancellationToken);
     }
 
     /// <summary>Asks <typeparamref name="T"/>'s questions about a UTF-8 JSON state and returns its typed answers.</summary>
