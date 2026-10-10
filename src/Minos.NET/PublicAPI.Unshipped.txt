@@ -44,3 +44,62 @@ Minos.QuestionSet.Definition.get -> Minos.QuestionSetDefinition!
 *REMOVED*static Minos.AnswerReader.ReadChoice<T>(ref System.Text.Json.Utf8JsonReader reader, Minos.DecisionOptionSet<T>! options, double[]! buffer, int offset) -> Minos.Choice<T>
 *REMOVED*static Minos.AnswerReader.ReadNoul(ref System.Text.Json.Utf8JsonReader reader) -> Minos.Noul
 *REMOVED*static Minos.AnswerReader.ReadScore<T>(ref System.Text.Json.Utf8JsonReader reader, Minos.DecisionOptionSet<T>! options, double[]! buffer, int offset) -> Minos.Score<T>
+Minos.DecisionClientMetadata
+Minos.DecisionClientMetadata.<Clone>$() -> Minos.DecisionClientMetadata!
+Minos.DecisionClientMetadata.DecisionClientMetadata(string! ProviderName, System.Uri? Endpoint, string? DefaultModel) -> void
+Minos.DecisionClientMetadata.Deconstruct(out string! ProviderName, out System.Uri? Endpoint, out string? DefaultModel) -> void
+Minos.DecisionClientMetadata.DefaultModel.get -> string?
+Minos.DecisionClientMetadata.DefaultModel.init -> void
+Minos.DecisionClientMetadata.Endpoint.get -> System.Uri?
+Minos.DecisionClientMetadata.Endpoint.init -> void
+Minos.DecisionClientMetadata.Equals(Minos.DecisionClientMetadata? other) -> bool
+Minos.DecisionClientMetadata.ProviderName.get -> string!
+Minos.DecisionClientMetadata.ProviderName.init -> void
+Minos.DecisionRequest
+Minos.DecisionRequest.<Clone>$() -> Minos.DecisionRequest!
+Minos.DecisionRequest.DecisionRequest(Minos.QuestionSetDefinition! Definition, Minos.DecisionContent State) -> void
+Minos.DecisionRequest.Definition.get -> Minos.QuestionSetDefinition!
+Minos.DecisionRequest.Equals(Minos.DecisionRequest? other) -> bool
+Minos.DecisionRequest.Model.get -> string?
+Minos.DecisionRequest.Model.init -> void
+Minos.DecisionRequest.RetryAttempt.get -> int
+Minos.DecisionRequest.RetryAttempt.init -> void
+Minos.DecisionRequest.State.get -> Minos.DecisionContent
+Minos.DecisionResponse
+Minos.DecisionResponse.Answers.get -> Minos.QuestionAnswerList
+Minos.DecisionResponse.DecisionResponse(Minos.QuestionSetDefinition! definition, System.Collections.Generic.IReadOnlyList<Minos.QuestionAnswer>! answers, string? model = null, Minos.DecisionUsage? usage = null) -> void
+Minos.DecisionResponse.Definition.get -> Minos.QuestionSetDefinition!
+Minos.DecisionResponse.Id.get -> string?
+Minos.DecisionResponse.Model.get -> string?
+Minos.DecisionResponse.Provider.get -> string?
+Minos.DecisionResponse.Usage.get -> Minos.DecisionUsage?
+Minos.QuestionAnswer
+Minos.QuestionAnswer.ChosenIndex.get -> int
+Minos.QuestionAnswer.Confidence.get -> double
+Minos.QuestionAnswer.Key.get -> string!
+Minos.QuestionAnswer.Kind.get -> Minos.QuestionKind
+Minos.QuestionAnswer.Probabilities.get -> System.ReadOnlySpan<double>
+Minos.QuestionAnswer.QuestionAnswer() -> void
+Minos.QuestionAnswer.Value.get -> double
+Minos.QuestionAnswerList
+Minos.QuestionAnswerList.Count.get -> int
+Minos.QuestionAnswerList.Enumerator
+Minos.QuestionAnswerList.Enumerator.Current.get -> Minos.QuestionAnswer
+Minos.QuestionAnswerList.Enumerator.Enumerator() -> void
+Minos.QuestionAnswerList.Enumerator.MoveNext() -> bool
+Minos.QuestionAnswerList.GetEnumerator() -> Minos.QuestionAnswerList.Enumerator
+Minos.QuestionAnswerList.QuestionAnswerList() -> void
+Minos.QuestionAnswerList.this[int index].get -> Minos.QuestionAnswer
+override Minos.DecisionClientMetadata.Equals(object? obj) -> bool
+override Minos.DecisionClientMetadata.GetHashCode() -> int
+override Minos.DecisionClientMetadata.ToString() -> string!
+override Minos.DecisionRequest.Equals(object? obj) -> bool
+override Minos.DecisionRequest.GetHashCode() -> int
+override Minos.DecisionRequest.ToString() -> string!
+static Minos.DecisionClientMetadata.operator !=(Minos.DecisionClientMetadata? left, Minos.DecisionClientMetadata? right) -> bool
+static Minos.DecisionClientMetadata.operator ==(Minos.DecisionClientMetadata? left, Minos.DecisionClientMetadata? right) -> bool
+static Minos.DecisionRequest.operator !=(Minos.DecisionRequest? left, Minos.DecisionRequest? right) -> bool
+static Minos.DecisionRequest.operator ==(Minos.DecisionRequest? left, Minos.DecisionRequest? right) -> bool
+static Minos.QuestionAnswer.Choice(int chosenIndex, double confidence, double[]! probabilities) -> Minos.QuestionAnswer
+static Minos.QuestionAnswer.Noul(double value) -> Minos.QuestionAnswer
+static Minos.QuestionAnswer.Score(int level, double value, double confidence, double[]! probabilities) -> Minos.QuestionAnswer

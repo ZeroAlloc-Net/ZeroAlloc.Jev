@@ -148,3 +148,28 @@ internal static class BuiltSets
     public static QuestionSet UrgencyOnly()
         => QuestionSet.CreateBuilder().Noul("is_urgent", "Does this convey urgency?", out _).Build().Value;
 }
+
+/// <summary>Run-time definitions the neutral request and response tests share.</summary>
+internal static class QuestionSets
+{
+    /// <summary>One Noul, <c>is_urgent</c>.</summary>
+    public static QuestionSetDefinition UrgencyDefinition()
+        => new(QuestionDefinition.Noul("is_urgent", DecisionContent.FromString("Is this urgent?")));
+
+    /// <summary>A Noul <c>is_urgent</c>, a Choice <c>department</c> of three options and a Score <c>severity</c> of three levels.</summary>
+    public static QuestionSetDefinition TriageDefinition()
+        => new(
+            QuestionDefinition.Noul("is_urgent", DecisionContent.FromString("Is this urgent?")),
+            QuestionDefinition.Choice(
+                "department",
+                DecisionContent.FromString("Which team should handle this?"),
+                new OptionDefinition("billing", Criterion.Text("Payments")),
+                new OptionDefinition("tech", Criterion.Text("Bugs")),
+                new OptionDefinition("other", null)),
+            QuestionDefinition.Score(
+                "severity",
+                DecisionContent.FromString("How severe is this?"),
+                "Cosmetic",
+                "Disruptive",
+                "Blocking"));
+}
