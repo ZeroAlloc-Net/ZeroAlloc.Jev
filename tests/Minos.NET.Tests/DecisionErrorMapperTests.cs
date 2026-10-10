@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Minos.Protocols;
 using Minos.Transport;
 using ZeroAlloc.Rest;
 
@@ -10,7 +11,7 @@ public sealed class DecisionErrorMapperTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 27, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly DecisionErrorMapper Mapper = new(new FixedTimeProvider(Now), disposed: null);
+    private static readonly DecisionErrorMapper Mapper = new(new FixedTimeProvider(Now), disposed: null, SystemOneProtocol.Instance);
 
     [Theory]
     [InlineData(401, DecisionErrorKind.Unauthorized)]
@@ -62,7 +63,7 @@ public sealed class DecisionErrorMapperTests
     [Fact]
     public void TimeoutOrTransport_AfterTheOwningClientWasDisposed_IsDisposed_WithException()
     {
-        var mapper = new DecisionErrorMapper(new FixedTimeProvider(Now), disposed: () => true);
+        var mapper = new DecisionErrorMapper(new FixedTimeProvider(Now), disposed: () => true, SystemOneProtocol.Instance);
         var cancelled = new TaskCanceledException("cancelled");
         var refused = new HttpRequestException("connection refused");
 
@@ -83,7 +84,7 @@ public sealed class DecisionErrorMapperTests
     public void Timeout_MappedBeforeTheDisposal_StaysTimeout_AndOneMappedAfterIsDisposed()
     {
         var disposed = false;
-        var mapper = new DecisionErrorMapper(new FixedTimeProvider(Now), () => disposed);
+        var mapper = new DecisionErrorMapper(new FixedTimeProvider(Now), () => disposed, SystemOneProtocol.Instance);
         var cause = new TaskCanceledException("timed out");
         var failure = new HttpError((HttpStatusCode)0, Headers(), cause.Message) { Kind = HttpErrorKind.Timeout, Exception = cause };
 
@@ -99,7 +100,7 @@ public sealed class DecisionErrorMapperTests
     [Fact]
     public void StatusOrDeserialization_AfterTheOwningClientWasDisposed_KeepsItsKind()
     {
-        var mapper = new DecisionErrorMapper(new FixedTimeProvider(Now), disposed: () => true);
+        var mapper = new DecisionErrorMapper(new FixedTimeProvider(Now), disposed: () => true, SystemOneProtocol.Instance);
         var cause = new JsonException("bad json");
 
         Assert.Equal(DecisionErrorKind.Overloaded, mapper.Map(Status(503)).Kind);

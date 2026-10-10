@@ -198,7 +198,7 @@ public sealed class DecisionClient : IDecisionClient, IDisposable
             httpClient,
             new SystemTextJsonSerializer(DecisionJsonContext.Default),
             new DecisionRawSerializer(pool),
-            new DecisionErrorMapper(time, _ownedHttpClient is null ? null : disposed));
+            new DecisionErrorMapper(time, _ownedHttpClient is null ? null : disposed, SystemOneProtocol.Instance));
         var retry = RetryPolicyFor(settings);
 
         // The retry proxy, then the disposal guard, then the logging decorator when there is a logger, then the transport.

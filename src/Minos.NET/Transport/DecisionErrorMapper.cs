@@ -1,5 +1,4 @@
-using System.Globalization;
-using System.Text.Json;
+using Minos.Protocols;
 using ZeroAlloc.Rest;
 
 namespace Minos.Transport;
@@ -10,7 +9,8 @@ namespace Minos.Transport;
 /// Reads whether the <see cref="DecisionClient"/> that owns the <see cref="HttpClient"/> has been disposed, or
 /// <see langword="null"/> for a borrowed <see cref="HttpClient"/>, which disposing the client never tears down.
 /// </param>
-internal sealed class DecisionErrorMapper(TimeProvider time, Func<bool>? disposed) : IHttpErrorMapper<DecisionError>
+/// <param name="protocol">The wire format that maps an error status and its body.</param>
+internal sealed class DecisionErrorMapper(TimeProvider time, Func<bool>? disposed, IDecisionProtocol protocol) : IHttpErrorMapper<DecisionError>
 {
     private const string DisposedMessage = "The client was disposed while the request was in flight.";
 
@@ -35,7 +35,7 @@ internal sealed class DecisionErrorMapper(TimeProvider time, Func<bool>? dispose
 
         return error.Kind switch
         {
-            HttpErrorKind.Status => FromStatus(error),
+            HttpErrorKind.Status => protocol.MapError((int)error.StatusCode, error.Body.Span, error.BodyTruncated, error.ContentType, RetryAfter(error)),
             HttpErrorKind.Timeout => new DecisionError(DecisionErrorKind.Timeout, "The request timed out.") { Exception = error.Exception },
             HttpErrorKind.Transport => new DecisionError(
                 DecisionErrorKind.Network, error.Message ?? "The request could not be sent.") { Exception = error.Exception },
@@ -54,29 +54,6 @@ internal sealed class DecisionErrorMapper(TimeProvider time, Func<bool>? dispose
                 StatusCode = (int)error.StatusCode,
                 Exception = error.Exception,
             },
-        };
-    }
-
-    private DecisionError FromStatus(HttpError error)
-    {
-        var status = (int)error.StatusCode;
-        var kind = status switch
-        {
-            401 or 403 => DecisionErrorKind.Unauthorized,
-            400 or 422 => DecisionErrorKind.Validation,
-            429 => DecisionErrorKind.RateLimited,
-            503 or 529 => DecisionErrorKind.Overloaded,
-            >= 500 => DecisionErrorKind.Server,
-            _ => DecisionErrorKind.Http,
-        };
-
-        return new DecisionError(
-            kind,
-            "The API returned HTTP " + status.ToString(CultureInfo.InvariantCulture) + ".")
-        {
-            StatusCode = status,
-            RetryAfter = RetryAfter(error),
-            Detail = Detail(error),
         };
     }
 
@@ -105,27 +82,4 @@ internal sealed class DecisionErrorMapper(TimeProvider time, Func<bool>? dispose
 
         return retryAfter is null ? null : RetryAfterHeader.Parse(retryAfter, time.GetUtcNow());
     }
-
-    private static JsonElement? Detail(HttpError error)
-    {
-        if (error.Body.IsEmpty || error.BodyTruncated || !IsJson(error.ContentType))
-        {
-            return null;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(error.Body);
-            return document.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static bool IsJson(string? contentType)
-        => contentType is not null
-            && (string.Equals(contentType, "application/json", StringComparison.OrdinalIgnoreCase)
-                || contentType.EndsWith("+json", StringComparison.OrdinalIgnoreCase));
 }

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text.Json;
 using Minos.Transport;
+using ZeroAlloc.Results;
 
 namespace Minos.Protocols;
 
@@ -17,4 +18,19 @@ internal interface IDecisionProtocol
     /// <summary>Reads the answers to <paramref name="definition"/> and builds the result with <paramref name="create"/>.</summary>
     /// <exception cref="JsonException">An answer is missing, has the wrong type, names an unknown option or level, or lacks a required field.</exception>
     TResult ReadAnswers<TResult>(ref Utf8JsonReader answers, QuestionSetDefinition definition, AnswerFactory<TResult> create);
+
+    /// <summary>Gets the path, relative to the client's base address, that requests are POSTed to.</summary>
+    string EndpointPath { get; }
+
+    /// <summary>Reads a successful response body into a <see cref="DecisionResponse"/> for <paramref name="definition"/>.</summary>
+    /// <returns>The response, or an <see cref="DecisionErrorKind.InvalidResponse"/> error with status 200.</returns>
+    Result<DecisionResponse, DecisionError> ReadResponse(ReadOnlySpan<byte> body, QuestionSetDefinition definition);
+
+    /// <summary>Maps an error status and its body to a <see cref="DecisionError"/>.</summary>
+    /// <param name="statusCode">The HTTP status.</param>
+    /// <param name="body">The error body, up to the transport's limit.</param>
+    /// <param name="bodyTruncated">Whether the transport cut the body at its limit.</param>
+    /// <param name="contentType">The body's media type, if any.</param>
+    /// <param name="retryAfter">The wait the response asked for, already parsed from its headers by the transport.</param>
+    DecisionError MapError(int statusCode, ReadOnlySpan<byte> body, bool bodyTruncated, string? contentType, TimeSpan? retryAfter);
 }

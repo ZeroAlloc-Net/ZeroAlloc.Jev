@@ -12,7 +12,7 @@ public sealed class DecisionResponse
     /// <param name="usage">The token usage, if known.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="answers"/> is <see langword="null"/>.</exception>
     /// <remarks>
-    /// Checked: a non-null element for every question, and per answer its kind, its probability count against the question's options, and a chosen position below the option count. The factories check the ranges of the confidence and the probabilities. Not checked: a Score's <see cref="QuestionAnswer.Value"/> against its levels, and that the probabilities sum to 1 or that the chosen position is the most probable.
+    /// Checked: a non-null element for every question, and per answer its kind, its probability count against the question's options, and a chosen position below the option count. The factories check the ranges of the confidence and the probabilities, the range of a Noul's <see cref="QuestionAnswer.Value"/> and that a Score's <see cref="QuestionAnswer.Value"/> is finite. Not checked: a Score's <see cref="QuestionAnswer.Value"/> against its levels, and that the probabilities sum to 1 or that the chosen position is the most probable.
     /// </remarks>
     /// <exception cref="ArgumentException">An answer is a default value, or the answers do not match the definition's questions in number, kind, option count or chosen position.</exception>
     public DecisionResponse(QuestionSetDefinition definition, IReadOnlyList<QuestionAnswer> answers, string? model = null, DecisionUsage? usage = null)
