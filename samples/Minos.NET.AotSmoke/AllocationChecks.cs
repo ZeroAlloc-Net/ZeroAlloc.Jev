@@ -216,11 +216,11 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         ReadOnlyMemory<byte> state = Encoding.UTF8.GetBytes(SmokeAnswers.JsonState);
 
-        // Measured 3704 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0: TypedEvaluateRoundTrip's 3424 B plus
-        // the JsonDocument DecisionContent.FromUtf8Json parses the state into, 280 B, which the string and JsonElement
-        // overloads do not pay. 176 B of it is 3.3.0's __EscapePath, fixed in 3.3.1; a constant-route build measures
-        // 3528 B/call. Budget: about 10% headroom over the measurement, rounded up to the next multiple of 64 B, per
-        // the Phase 1.8 rule.
+        // Measured 3424 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, the same as TypedEvaluateRoundTrip: the
+        // request keeps the caller's array and the request writer copies its bytes into the body, so the state adds
+        // nothing. 176 B of it is 3.3.0's __EscapePath, fixed in 3.3.1; a constant-route build measures 3248 B/call. It
+        // measured 3704 B/call when the overload parsed the state into a 280 B JsonDocument. Budget: set over that
+        // measurement, with about 10% headroom rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
             budgetBytes: 4096,
             action: () => client.EvaluateUtf8Async<SmokeTriage>(state),
@@ -235,12 +235,13 @@ internal static class AllocationChecks
         using var client = new DecisionClient(http, new DecisionClientOptions { ApiKey = "smoke-key" });
         var state = new SmokeState("Payouts failing", SmokeAnswers.State);
 
-        // Measured 3008 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, over a one-question response: the
-        // transport's request and response, the DecisionResponse, the SmokeStateTriage, and the JsonDocument
-        // DecisionContent.FromValue serializes the state into, which ContentFromValue measures at 280 B for the same
-        // state and the string and JsonElement overloads do not pay. 176 B of it is 3.3.0's __EscapePath, fixed in
-        // 3.3.1; a constant-route build measures 2832 B/call. Budget: about 10% headroom over the measurement, rounded
-        // up to the next multiple of 64 B, per the Phase 1.8 rule.
+        // Measured 3016 B/call on published win-x64 AOT on ZeroAlloc.Rest 3.3.0, over a one-question response: the
+        // transport's request and response, the DecisionResponse, the SmokeStateTriage, and the serialized state, which
+        // the string and JsonElement overloads do not pay: the Utf8JsonWriter and pooled RawJson it is written through,
+        // and the array of its bytes the request keeps. 176 B of it is 3.3.0's __EscapePath, fixed in 3.3.1; a
+        // constant-route build measures 2840 B/call. It measured 3008 B/call when the state was a JsonDocument from
+        // DecisionContent.FromValue, which re-wrote a converter's raw JSON. Budget: about 10% headroom over that
+        // measurement, rounded up to the next multiple of 64 B, per the Phase 1.8 rule.
         GateValueTask(
             budgetBytes: 3328,
             action: () => client.EvaluateAsync<SmokeStateTriage, SmokeState>(state, SmokeStateJsonContext.Default.SmokeState),

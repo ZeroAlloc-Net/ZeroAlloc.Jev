@@ -87,8 +87,9 @@ public static class DecisionClientExtensions
     /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
     /// <param name="client">The client to ask.</param>
     /// <param name="utf8JsonState">
-    /// The state as one UTF-8 JSON value: a string is sent as text; an object or array as structured content. It is
-    /// not referenced after the call returns.
+    /// The state as one UTF-8 JSON value: a string is sent as text; an object or array as structured content. Its bytes
+    /// are sent as written, without a copy, so do not change them until the returned task completes: a retry sends them
+    /// again. It is not referenced after that.
     /// </param>
     /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
     /// <remarks>Calls <see cref="EvaluateUtf8Async{T}(IDecisionClient, ReadOnlyMemory{byte}, CancellationToken)"/> without cancellation.</remarks>
@@ -105,8 +106,9 @@ public static class DecisionClientExtensions
     /// <typeparam name="T">A <c>[Questions]</c> question set.</typeparam>
     /// <param name="client">The client to ask.</param>
     /// <param name="utf8JsonState">
-    /// The state as one UTF-8 JSON value: a string is sent as text; an object or array as structured content. It is
-    /// not referenced after the call returns.
+    /// The state as one UTF-8 JSON value: a string is sent as text; an object or array as structured content. Its bytes
+    /// are sent as written, without a copy, so do not change them until the returned task completes: a retry sends them
+    /// again. It is not referenced after that.
     /// </param>
     /// <param name="cancellationToken">Cancels the call; cancellation throws <see cref="OperationCanceledException"/>.</param>
     /// <returns>The typed answers, or the <see cref="DecisionError"/> that prevented them.</returns>
@@ -121,7 +123,7 @@ public static class DecisionClientExtensions
     {
         ArgumentNullException.ThrowIfNull(client);
         TypedEvaluation.EnsureStateJson(utf8JsonState.Span, nameof(utf8JsonState));
-        return Typed<T>(client, DecisionContent.FromUtf8Json(utf8JsonState.Span, nameof(utf8JsonState)), cancellationToken);
+        return Typed<T>(client, DecisionContent.FromCheckedUtf8State(utf8JsonState), cancellationToken);
     }
 
     /// <summary>
@@ -175,7 +177,7 @@ public static class DecisionClientExtensions
         }
 
         ArgumentNullException.ThrowIfNull(stateTypeInfo);
-        return Typed<T>(client, DecisionContent.FromValue(state, stateTypeInfo, nameof(state)), cancellationToken);
+        return Typed<T>(client, TypedEvaluation.SerializeState(state, stateTypeInfo, nameof(state)), cancellationToken);
     }
 
     /// <summary>Asks a built question set's questions about a state and returns its answers.</summary>

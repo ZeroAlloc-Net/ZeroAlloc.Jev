@@ -56,6 +56,11 @@ public partial record PaddedUrgency
     public partial Noul IsUrgent { get; }
 }
 
+/// <summary>Metadata whose options indent, which the request body must not: the body writer's options apply, as on main.</summary>
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(TicketContext))]
+internal sealed partial class IndentedTicketContextJsonContext : JsonSerializerContext;
+
 /// <summary>Covers <see cref="DecisionClient"/>'s own typed <c>EvaluateAsync</c> overloads, the raw UTF-8 path.</summary>
 public sealed class DecisionClientTypedTests : IDisposable
 {
@@ -137,6 +142,85 @@ public sealed class DecisionClientTypedTests : IDisposable
         return AssertSendsTheDefaultRequest(
             c => c.EvaluateUtf8Async<UrgencyCheck>(utf8, CancellationToken.None),
             c => c.EvaluateUtf8Async<UrgencyCheck>(utf8, CancellationToken.None));
+    }
+
+    // On main the UTF-8 overload copied the caller's bytes into the body with WriteRawValue, so whitespace, escapes and
+    // characters the body's encoder would escape, such as é and <, reach the wire exactly as the caller wrote them.
+    [Theory]
+    [InlineData(" { \"subject\" : \"café é\",\n\t\"html\": \"<b>&amp;</b>\", \"escaped\": \"\\u00e9 \\u003c\", \"n\": 1.50 } ")]
+    [InlineData("[ 1 , \"<é>\" ,{}]")]
+    [InlineData("  \"plain <text> é \\u00e9\"  ")]
+    public async Task Utf8_SendsTheCallersBytesUnchanged(string json)
+    {
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        var pool = new CountingPool();
+        using var client = Client(handler, pool);
+
+        var result = await client.EvaluateUtf8Async<UrgencyCheck>(Encoding.UTF8.GetBytes(json));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, json), OnlyRequest(handler).Body);
+        Assert.Equal(0, pool.Outstanding);
+    }
+
+    [Fact]
+    public async Task Utf8_FromASliceOfALargerBuffer_SendsOnlyTheSlice()
+    {
+        const string Json = """{ "subject" : "<é>" }""";
+        var bytes = Encoding.UTF8.GetBytes("xx" + Json + "yy");
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateUtf8Async<UrgencyCheck>(bytes.AsMemory(2, bytes.Length - 4), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ExpectedBytes(UrgencyCheck.Definition, Json), OnlyRequest(handler).Body);
+    }
+
+    // On main the typed overload serialized the state straight into the body's writer, so the body's encoder escaped it.
+    // The expected state is written the same way: JsonSerializer over a Utf8JsonWriter with default options.
+    [Fact]
+    public async Task TypedState_SendsWhatTheSerializerWritesIntoTheBody()
+    {
+        var state = new TicketContext("Café <b> & \"quoted\" é", "line\nbreak \u2028 😀 '+'");
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateAsync<TicketUrgency, TicketContext>(state, TicketContextJsonContext.Default.TicketContext);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            ExpectedBytes(TicketUrgency.Definition, SerializedIntoAWriter(state, TicketContextJsonContext.Default.TicketContext)),
+            OnlyRequest(handler).Body);
+    }
+
+    [Fact]
+    public async Task TypedState_WithIndentingOptions_SendsWhatTheSerializerWritesIntoTheBody()
+    {
+        var state = new TicketContext("Café <b>", "Help!");
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateAsync<TicketUrgency, TicketContext>(state, IndentedTicketContextJsonContext.Default.TicketContext);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            ExpectedBytes(TicketUrgency.Definition, SerializedIntoAWriter(state, IndentedTicketContextJsonContext.Default.TicketContext)),
+            OnlyRequest(handler).Body);
+        Assert.DoesNotContain('\n', OnlyRequest(handler).Body!);
+    }
+
+    [Fact]
+    public async Task TypedState_WhoseConverterWritesRawJson_SendsItUnchanged()
+    {
+        const string Json = """ { "a" : "\u00e9" } """;
+        var handler = StubHandler.Json(HttpStatusCode.OK, Fixture.Text("response-noul.json"));
+        using var client = Client(handler);
+
+        var result = await client.EvaluateAsync<PaddedUrgency, PaddedState>(new PaddedState(Json), PaddedStateJsonContext.Default.PaddedState);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(ExpectedBytes(PaddedUrgency.Definition, Json), OnlyRequest(handler).Body);
     }
 
     [Fact]
@@ -449,6 +533,22 @@ public sealed class DecisionClientTypedTests : IDisposable
         // The raw path rents its buffers from the client's pool; the default path would not touch it.
         Assert.True(pool.Rented >= 2, $"rented {pool.Rented}");
         Assert.Equal(0, pool.Outstanding);
+    }
+
+    // The body main's request writer produced: the state, the client's model, then the definition's questions.
+    private static string ExpectedBytes(QuestionSetDefinition definition, string stateJson)
+        => "{\"state\":" + stateJson + ",\"model\":\"" + TestModel + "\",\"questions\":"
+            + Encoding.UTF8.GetString(Minos.Protocols.SystemOneProtocol.QuestionsJson(definition)) + "}";
+
+    private static string SerializedIntoAWriter<TState>(TState state, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TState> typeInfo)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            JsonSerializer.Serialize(writer, state, typeInfo);
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     private DecisionClient Client(StubHandler handler, CountingPool? pool = null, DecisionProvider provider = DecisionProvider.TypeSafe)
