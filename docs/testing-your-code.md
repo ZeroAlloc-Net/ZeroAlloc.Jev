@@ -96,66 +96,58 @@ text, `JsonElement` and UTF-8 overloads, all end up in the one method the fake w
 
 <!-- snippet: TestingYourCode_Fake -->
 ```cs
-using System.Text.Json;
 using Minos;
 using ZeroAlloc.Results;
 
-// A fake implements the two abstract members. Every other member of IDecisionClient has a default that calls EvaluateAsync.
-public sealed class FakeDecision(Result<SystemOneResponse, DecisionError> reply) : IDecisionClient
+// A fake implements EvaluateAsync, GetService and Dispose. The typed calls are extension methods over EvaluateAsync.
+public sealed class FakeDecision(Result<DecisionResponse, DecisionError> reply) : IDecisionClient
 {
-    private readonly List<SystemOneRequest> _requests = [];
+    private readonly List<DecisionRequest> _requests = [];
 
     // Every request the code under test sent, so a test can check what was asked.
-    public IReadOnlyList<SystemOneRequest> Requests => _requests;
+    public IReadOnlyList<DecisionRequest> Requests => _requests;
 
-    // A reply that answers both questions of TriageQuestions.
+    // A reply that answers both questions of TriageQuestions, in the order the set declares them.
     public static FakeDecision Answering(double urgent, TriageDesk desk, double deskConfidence)
     {
-        // A Choice names its options by the enum member in snake_case, so ProductTeam is product_team.
-        var probabilities = new Dictionary<string, double>();
-        foreach (var option in Enum.GetValues<TriageDesk>())
+        // A Choice answer gives one probability per option, in the order the enum declares them.
+        var desks = Enum.GetValues<TriageDesk>();
+        var probabilities = new double[desks.Length];
+        for (var i = 0; i < desks.Length; i++)
         {
-            probabilities[JsonNamingPolicy.SnakeCaseLower.ConvertName(option.ToString())] = option == desk ? 0.7 : 0.15;
+            probabilities[i] = desks[i] == desk ? 0.7 : 0.15;
         }
 
-        return new FakeDecision(Result<SystemOneResponse, DecisionError>.Success(new SystemOneResponse
-        {
-            Model = "fake",
-            Usage = new DecisionUsage { InputTokens = 1, OutputTokens = 1 },
-            Answers = new Dictionary<string, Answer>
-            {
-                // The keys are the wire keys of the questions.
-                ["is_urgent"] = new NoulAnswer { Noul = urgent },
-                ["desk"] = new ChoiceAnswer
-                {
-                    Choice = JsonNamingPolicy.SnakeCaseLower.ConvertName(desk.ToString()),
-                    Confidence = deskConfidence,
-                    Probabilities = probabilities,
-                },
-            },
-        }));
+        return new FakeDecision(Result<DecisionResponse, DecisionError>.Success(new DecisionResponse(
+            TriageQuestions.Definition,
+            [QuestionAnswer.Noul(urgent), QuestionAnswer.Choice(Array.IndexOf(desks, desk), deskConfidence, probabilities)],
+            model: "fake")));
     }
 
     // A reply that is a failure, as a rejected key or a network error would be.
     public static FakeDecision Failing(DecisionErrorKind kind)
-        => new(Result<SystemOneResponse, DecisionError>.Failure(new DecisionError(kind, "The fake failed on purpose.")));
+        => new(Result<DecisionResponse, DecisionError>.Failure(new DecisionError(kind, "The fake failed on purpose.")));
 
     // A busy service: the kind and message are the constructor's, the rest are init properties.
     public static FakeDecision Overloaded(TimeSpan retryAfter)
-        => new(Result<SystemOneResponse, DecisionError>.Failure(new DecisionError(DecisionErrorKind.Overloaded, "The fake is busy on purpose.")
+        => new(Result<DecisionResponse, DecisionError>.Failure(new DecisionError(DecisionErrorKind.Overloaded, "The fake is busy on purpose.")
         {
             StatusCode = 503,
             RetryAfter = retryAfter,
         }));
 
-    public ValueTask<Result<SystemOneResponse, DecisionError>> EvaluateAsync(SystemOneRequest request, CancellationToken cancellationToken)
+    public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
     {
         _requests.Add(request);
         return ValueTask.FromResult(reply);
     }
 
-    public ValueTask<Result<ModelList, DecisionError>> ListModelsAsync(CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("This fake does not list models.");
+    // The fake offers no services, such as DecisionClientMetadata.
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+    public void Dispose()
+    {
+    }
 }
 ```
 <!-- endSnippet -->

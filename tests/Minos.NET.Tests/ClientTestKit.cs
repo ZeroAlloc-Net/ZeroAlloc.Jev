@@ -12,7 +12,8 @@ internal static class ClientTestKit
 {
     public const string TestModel = "jev-test-model";
 
-    // The exception must come from the call itself, before any task exists, as for the default interface methods.
+    // The exception must come from the call itself, before any task exists: argument checks, in DecisionClient's members
+    // and in DecisionClientExtensions, throw synchronously rather than faulting the returned task.
     public static TException ThrowsSynchronously<TException>(Func<Task> call)
         where TException : Exception
     {
