@@ -7,7 +7,7 @@ namespace Minos.Protocols;
 /// <remarks>
 /// Fails exactly as the typed path did: the same messages, status 200, and <see cref="DecisionErrorKind.InvalidResponse"/>.
 /// <c>model</c>, <c>usage</c>, <c>id</c> and <c>provider</c> are optional and read leniently: a field of the wrong type is
-/// treated as absent, never as an error, as telemetry has always read them. A repeated field keeps its first value.
+/// treated as absent, never as an error, as telemetry has always read them. The first occurrence of a field decides it, even when that occurrence has the wrong type; a repeat is skipped, and so is a second <c>usage</c> object.
 /// </remarks>
 internal static class SystemOneResponseReader
 {
@@ -26,6 +26,7 @@ internal static class SystemOneResponseReader
 
             (AnswerSlot[] Slots, double[] Probabilities)? answers = null;
             string? model = null, id = null, provider = null;
+            bool modelSeen = false, idSeen = false, providerSeen = false, usageSeen = false;
             int? inputTokens = null, outputTokens = null;
             double? cost = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
@@ -48,22 +49,54 @@ internal static class SystemOneResponseReader
                 else if (reader.ValueTextEquals("model"u8))
                 {
                     reader.Read();
-                    model ??= StringOrSkip(ref reader);
+                    if (modelSeen)
+                    {
+                        reader.Skip();
+                    }
+                    else
+                    {
+                        modelSeen = true;
+                        model = StringOrSkip(ref reader);
+                    }
                 }
                 else if (reader.ValueTextEquals("id"u8))
                 {
                     reader.Read();
-                    id ??= StringOrSkip(ref reader);
+                    if (idSeen)
+                    {
+                        reader.Skip();
+                    }
+                    else
+                    {
+                        idSeen = true;
+                        id = StringOrSkip(ref reader);
+                    }
                 }
                 else if (reader.ValueTextEquals("provider"u8))
                 {
                     reader.Read();
-                    provider ??= StringOrSkip(ref reader);
+                    if (providerSeen)
+                    {
+                        reader.Skip();
+                    }
+                    else
+                    {
+                        providerSeen = true;
+                        provider = StringOrSkip(ref reader);
+                    }
                 }
                 else if (reader.ValueTextEquals("usage"u8))
                 {
                     reader.Read();
-                    ReadUsage(ref reader, ref inputTokens, ref outputTokens, ref cost);
+                    if (usageSeen)
+                    {
+                        reader.Skip();
+                    }
+                    else
+                    {
+                        usageSeen = true;
+                        ReadUsage(ref reader, ref inputTokens, ref outputTokens, ref cost);
+                    }
                 }
                 else
                 {
@@ -111,20 +144,24 @@ internal static class SystemOneResponseReader
             return;
         }
 
+        bool inputSeen = false, outputSeen = false, costSeen = false;
         while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
         {
             var field = reader.ValueTextEquals("input_tokens"u8) ? 1 : reader.ValueTextEquals("output_tokens"u8) ? 2 : reader.ValueTextEquals("cost"u8) ? 3 : 0;
             reader.Read();
             switch (field)
             {
-                case 1 when reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var input) && inputTokens is null:
-                    inputTokens = input;
+                case 1 when !inputSeen:
+                    inputSeen = true;
+                    inputTokens = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var input) ? input : null;
                     break;
-                case 2 when reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var output) && outputTokens is null:
-                    outputTokens = output;
+                case 2 when !outputSeen:
+                    outputSeen = true;
+                    outputTokens = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var output) ? output : null;
                     break;
-                case 3 when reader.TokenType == JsonTokenType.Number && reader.TryGetDouble(out var value) && cost is null:
-                    cost = value;
+                case 3 when !costSeen:
+                    costSeen = true;
+                    cost = reader.TokenType == JsonTokenType.Number && reader.TryGetDouble(out var value) ? value : null;
                     break;
                 default:
                     reader.Skip();

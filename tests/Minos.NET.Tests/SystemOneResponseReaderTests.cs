@@ -52,7 +52,7 @@ public sealed class SystemOneResponseReaderTests
     }
 
     [Fact]
-    public void A_repeated_field_keeps_its_first_value()
+    public void A_repeated_field_keeps_its_first_value_and_a_second_usage_is_ignored()
     {
         var body = """
             {"model":"first","model":"second","id":"a","id":"b","provider":"p1","provider":"p2",
@@ -69,6 +69,40 @@ public sealed class SystemOneResponseReaderTests
         Assert.Equal(1, response.InputTokens);
         Assert.Equal(3, response.OutputTokens);
         Assert.Equal(0.5, response.Cost);
+    }
+
+    [Theory]
+    [InlineData("""{"model":5,"model":"x","answers":{"is_urgent":{"type":"noul","noul":0.5}}}""")]
+    [InlineData("""{"id":5,"id":"x","answers":{"is_urgent":{"type":"noul","noul":0.5}}}""")]
+    [InlineData("""{"provider":5,"provider":"x","answers":{"is_urgent":{"type":"noul","noul":0.5}}}""")]
+    public void A_wrong_typed_first_string_field_decides_null_over_a_later_valid_one(string json)
+    {
+        var response = SystemOneProtocol.Instance.ReadResponse(System.Text.Encoding.UTF8.GetBytes(json), Urgency).Value;
+
+        Assert.Null(response.Model);
+        Assert.Null(response.Id);
+        Assert.Null(response.Provider);
+    }
+
+    [Fact]
+    public void A_first_usage_without_input_tokens_is_not_completed_by_a_second_usage()
+    {
+        var response = SystemOneProtocol.Instance.ReadResponse(
+            """{"answers":{"is_urgent":{"type":"noul","noul":0.5}},"usage":{"output_tokens":2},"usage":{"input_tokens":1,"output_tokens":9}}"""u8, Urgency).Value;
+
+        Assert.Null(response.InputTokens);
+        Assert.Equal(2, response.OutputTokens);
+        Assert.Null(response.Usage);
+    }
+
+    [Fact]
+    public void A_wrong_typed_first_usage_member_decides_null_over_a_later_valid_one()
+    {
+        var response = SystemOneProtocol.Instance.ReadResponse(
+            """{"answers":{"is_urgent":{"type":"noul","noul":0.5}},"usage":{"input_tokens":"a","input_tokens":3,"output_tokens":4}}"""u8, Urgency).Value;
+
+        Assert.Null(response.InputTokens);
+        Assert.Equal(4, response.OutputTokens);
     }
 
     [Fact]
