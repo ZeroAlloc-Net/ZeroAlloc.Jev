@@ -18,13 +18,13 @@ public sealed class DecisionRequestTests
     [Fact]
     public void With_copies_and_sets_the_attempt()
     {
-        var request = new DecisionRequest(Definition, "a ticket") { Model = "jev-x" };
+        var request = new DecisionRequest(Definition, "a ticket") { Model = "minos-x" };
 
         var retry = request with { RetryAttempt = 2 };
 
         Assert.NotSame(request, retry);
         Assert.Equal(2, retry.RetryAttempt);
-        Assert.Equal("jev-x", retry.Model);
+        Assert.Equal("minos-x", retry.Model);
         Assert.Equal(0, request.RetryAttempt);
     }
 

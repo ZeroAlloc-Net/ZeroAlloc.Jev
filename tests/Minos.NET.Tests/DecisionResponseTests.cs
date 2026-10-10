@@ -12,7 +12,7 @@ public sealed class DecisionResponseTests
                 QuestionAnswer.Choice(1, 0.8, [0.1, 0.8, 0.1]),
                 QuestionAnswer.Score(2, 1.7, 0.6, [0.1, 0.1, 0.8]),
             ],
-            model: "jev-1",
+            model: "minos-1",
             usage: new DecisionUsage { InputTokens = 10, OutputTokens = 3 });
 
     [Fact]
@@ -52,7 +52,7 @@ public sealed class DecisionResponseTests
     {
         var response = Sample();
 
-        Assert.Equal("jev-1", response.Model);
+        Assert.Equal("minos-1", response.Model);
         Assert.Equal(10, response.Usage!.InputTokens);
         Assert.Equal(10, response.InputTokens);
         Assert.Equal(3, response.OutputTokens);
