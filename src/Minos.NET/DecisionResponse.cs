@@ -11,7 +11,10 @@ public sealed class DecisionResponse
     /// <param name="model">The model that answered, if known.</param>
     /// <param name="usage">The token usage, if known.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="answers"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException">The answers do not match the definition's questions in number, kind, option count or chosen position.</exception>
+    /// <remarks>
+    /// Checked: a non-null element for every question, and per answer its kind, its probability count against the question's options, and a chosen position below the option count. The factories check the ranges of the confidence and the probabilities. Not checked: a Score's <see cref="QuestionAnswer.Value"/> against its levels, and that the probabilities sum to 1 or that the chosen position is the most probable.
+    /// </remarks>
+    /// <exception cref="ArgumentException">An answer is a default value, or the answers do not match the definition's questions in number, kind, option count or chosen position.</exception>
     public DecisionResponse(QuestionSetDefinition definition, IReadOnlyList<QuestionAnswer> answers, string? model = null, DecisionUsage? usage = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
@@ -27,6 +30,11 @@ public sealed class DecisionResponse
         for (var i = 0; i < questions.Length; i++)
         {
             var answer = answers[i];
+            if (answer.IsDefault)
+            {
+                throw new ArgumentException($"Answer {i} is a default value; make answers with the QuestionAnswer factories.", nameof(answers));
+            }
+
             var question = questions[i];
             if (answer.Kind != question.Kind)
             {

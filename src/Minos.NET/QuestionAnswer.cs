@@ -11,13 +11,14 @@ namespace Minos;
 [StructLayout(LayoutKind.Auto)]
 public readonly struct QuestionAnswer
 {
+    private readonly string? _key;
     private readonly double[]? _probabilities;
     private readonly int _offset;
     private readonly int _count;
 
     internal QuestionAnswer(string key, QuestionKind kind, int chosenIndex, double value, double confidence, double[]? probabilities, int offset, int count)
     {
-        Key = key;
+        _key = key;
         Kind = kind;
         ChosenIndex = chosenIndex;
         Value = value;
@@ -28,7 +29,10 @@ public readonly struct QuestionAnswer
     }
 
     /// <summary>Gets the question's key; empty for an answer made by a factory and not yet part of a response.</summary>
-    public string Key { get; } = string.Empty;
+    public string Key => _key ?? string.Empty;
+
+    // A default answer has no key; the factories and responses always set one, empty at most.
+    internal bool IsDefault => _key is null;
 
     /// <summary>Gets the question's kind.</summary>
     public QuestionKind Kind { get; }

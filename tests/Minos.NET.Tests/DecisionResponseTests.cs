@@ -94,6 +94,47 @@ public sealed class DecisionResponseTests
             Triage, [QuestionAnswer.Noul(0.5), QuestionAnswer.Choice(3, 0.5, [0.2, 0.3, 0.5]), QuestionAnswer.Score(0, 0, 0.5, [1, 0, 0])]));
 
     [Fact]
+    public void Chosen_index_must_be_an_option_of_a_score()
+        => Assert.Throws<ArgumentException>("answers", () => new DecisionResponse(
+            Triage, [QuestionAnswer.Noul(0.5), QuestionAnswer.Choice(0, 0.5, [0.2, 0.3, 0.5]), QuestionAnswer.Score(3, 0, 0.5, [1, 0, 0])]));
+
+    [Fact]
+    public void Default_answer_throws()
+        => Assert.Throws<ArgumentException>("answers", () => new DecisionResponse(
+            Triage, [default, QuestionAnswer.Choice(0, 0.5, [0.2, 0.3, 0.5]), QuestionAnswer.Score(0, 0, 0.5, [1, 0, 0])]));
+
+    [Fact]
+    public void Default_answer_has_an_empty_key()
+        => Assert.Equal(string.Empty, default(QuestionAnswer).Key);
+
+    [Fact]
+    public void Choice_copies_its_probabilities()
+    {
+        double[] source = [0.1, 0.8, 0.1];
+        var answer = QuestionAnswer.Choice(1, 0.8, source);
+
+        source[1] = 0;
+
+        Assert.Equal([0.1, 0.8, 0.1], answer.Probabilities.ToArray());
+    }
+
+    [Fact]
+    public void Default_answer_list_is_empty()
+    {
+        var list = default(QuestionAnswerList);
+
+        Assert.Equal(0, list.Count);
+        Assert.Throws<ArgumentOutOfRangeException>(() => list[0]);
+    }
+
+    private enum Team
+    {
+        Billing,
+        Tech,
+        Other,
+    }
+
+    [Fact]
     public void Factories_reject_out_of_range_values()
     {
         Assert.Throws<ArgumentOutOfRangeException>("value", () => QuestionAnswer.Noul(1.5));
@@ -108,5 +149,17 @@ public sealed class DecisionResponseTests
 
         Assert.Equal(3, slots.Count);
         Assert.Equal(0.9, slots.Noul(0).Probability);
+
+        var choice = slots.Choice(1, EnumOptionSet<Team>.ForChoice);
+        Assert.Equal(Team.Tech, choice.Value);
+        Assert.Equal(0.8, choice.Confidence);
+        Assert.Equal(0.8, choice.Probabilities[Team.Tech]);
+        Assert.Equal(0.1, choice.Probabilities[Team.Billing]);
+
+        var score = slots.Score(2, EnumOptionSet<Team>.ForChoice);
+        Assert.Equal(Team.Other, score.Value);
+        Assert.Equal(1.7, score.Expected);
+        Assert.Equal(0.6, score.Confidence);
+        Assert.Equal(0.8, score.Probabilities[Team.Other]);
     }
 }
