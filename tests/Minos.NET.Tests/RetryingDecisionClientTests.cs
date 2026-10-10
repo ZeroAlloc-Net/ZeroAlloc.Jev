@@ -193,18 +193,160 @@ public sealed class RetryingDecisionClientTests
         await client.EvaluateAsync(Request);
 
         Assert.Equal([0], inner.Requests.Select(r => r.RetryAttempt));
-        Assert.Equal(0, inner.Offered.MaxRetries);
     }
 
     [Fact]
-    public void Use_retries_configure_changes_a_copy()
+    public async Task Use_retries_configure_changes_a_copy_and_the_stage_uses_it()
     {
         var offered = new DecisionRetryOptions { MaxRetries = 1 };
         var inner = new OptionsOffering(offered);
-        using var client = inner.AsBuilder().UseRetries(o => o.MaxRetries = 4).Build();
+        var time = new FakeTimeProvider();
+        using var client = inner.AsBuilder().UseRetries(o =>
+        {
+            o.MaxRetries = 4;
+            o.Jitter = false;
+        }).Build(new Services(time, null));
+
+        var call = client.EvaluateAsync(Request).AsTask();
+        await Eventually(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(30));
+            return call.IsCompleted;
+        });
+        await call;
 
         Assert.Equal(1, offered.MaxRetries);
+        Assert.Equal([0, 1, 2, 3, 4], inner.Requests.Select(r => r.RetryAttempt));
         Assert.NotNull(client.GetService<RetryingDecisionClient>());
+    }
+
+    [Fact]
+    public async Task Use_retries_takes_the_logger_factory_and_time_provider_from_the_build_services()
+    {
+        var inner = new Scripted(Fail(DecisionErrorKind.Server), Fail(DecisionErrorKind.Server), Ok());
+        var time = new FakeTimeProvider();
+        using var logs = new LogCapture();
+        using var client = inner.AsBuilder().UseRetries(o => o.Jitter = false).Build(new Services(time, logs.Factory));
+
+        var call = client.EvaluateAsync(Request).AsTask();
+        await Eventually(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(30));
+            return call.IsCompleted;
+        });
+
+        Assert.True((await call).IsSuccess);
+        Assert.Equal(3, inner.Requests.Count);
+        Assert.Equal(["1", "2"], logs.Records.Where(r => r.Id.Id == 1003).Select(r => LogAssert.Field(r, "Attempt")));
+    }
+
+    [Fact]
+    public async Task A_retry_that_meets_a_disposed_inner_client_after_the_flag_check_is_disposed()
+    {
+        var inner = new DisposesOnRetry();
+        var time = new FakeTimeProvider();
+        var stage = new RetryingDecisionClient(inner, new DecisionRetryOptions { Jitter = false }, timeProvider: time);
+        inner.Stage = stage;
+
+        var call = stage.EvaluateAsync(Request).AsTask();
+        time.Advance(TimeSpan.FromMilliseconds(500));
+        var result = await call;
+
+        Assert.Equal(DecisionErrorKind.Disposed, result.Error.Kind);
+        Assert.Same(inner.Thrown, result.Error.Exception);
+    }
+
+    [Fact]
+    public async Task An_object_disposed_exception_from_a_live_stage_propagates()
+    {
+        var inner = new DisposesOnRetry { DisposeStage = false };
+        var time = new FakeTimeProvider();
+        using var stage = new RetryingDecisionClient(inner, new DecisionRetryOptions { Jitter = false }, timeProvider: time);
+        inner.Stage = stage;
+
+        var call = stage.EvaluateAsync(Request).AsTask();
+        time.Advance(TimeSpan.FromMilliseconds(500));
+
+        Assert.Same(inner.Thrown, await Assert.ThrowsAsync<ObjectDisposedException>(() => call));
+    }
+
+    [Fact]
+    public async Task Should_retry_judges_each_failure_once()
+    {
+        var judged = 0;
+        var time = new FakeTimeProvider();
+        var options = new DecisionRetryOptions
+        {
+            Jitter = false,
+            ShouldRetry = e =>
+            {
+                Interlocked.Increment(ref judged);
+                return DecisionRetryOptions.IsTransient(e);
+            },
+        };
+        using var stage = new RetryingDecisionClient(new Scripted(Fail(DecisionErrorKind.Server), Fail(DecisionErrorKind.Server), Ok()), options, timeProvider: time);
+
+        var call = stage.EvaluateAsync(Request).AsTask();
+        await Eventually(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(30));
+            return call.IsCompleted;
+        });
+        await call;
+
+        Assert.Equal(2, Volatile.Read(ref judged));
+    }
+
+    [Fact]
+    public async Task Should_retry_judges_an_asynchronous_first_failure_once()
+    {
+        var judged = 0;
+        var pending = new TaskCompletionSource<Result<DecisionResponse, DecisionError>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var time = new FakeTimeProvider();
+        var options = new DecisionRetryOptions
+        {
+            MaxRetries = 1,
+            Jitter = false,
+            ShouldRetry = e =>
+            {
+                Interlocked.Increment(ref judged);
+                return true;
+            },
+        };
+        using var stage = new RetryingDecisionClient(new Pending(pending.Task), options, timeProvider: time);
+
+        var call = stage.EvaluateAsync(Request).AsTask();
+        pending.SetResult(Fail(DecisionErrorKind.Server));
+        await Eventually(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(30));
+            return call.IsCompleted;
+        });
+        await call;
+
+        // The first failure is retried and judged once; the retry's failure is the last attempt and is never judged.
+        Assert.Equal(1, Volatile.Read(ref judged));
+    }
+
+    [Fact]
+    public async Task An_asynchronously_completed_first_failure_that_is_retried_is_logged()
+    {
+        var pending = new TaskCompletionSource<Result<DecisionResponse, DecisionError>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var time = new FakeTimeProvider();
+        using var logs = new LogCapture();
+        using var stage = new RetryingDecisionClient(new Pending(pending.Task), new DecisionRetryOptions { Jitter = false }, Logger(logs), time);
+
+        var call = stage.EvaluateAsync(Request).AsTask();
+        Assert.Empty(logs.Records);
+        pending.SetResult(Fail(DecisionErrorKind.Overloaded, 503));
+        await Eventually(() =>
+        {
+            time.Advance(TimeSpan.FromSeconds(30));
+            return call.IsCompleted;
+        });
+        await call;
+
+        Assert.Equal("1", LogAssert.Field(logs.Records.First(r => r.Id.Id == 1003), "Attempt"));
     }
 
     [Fact]
@@ -326,6 +468,45 @@ public sealed class RetryingDecisionClientTests
         {
             Assert.True(DateTime.UtcNow < deadline, "The condition did not hold within 5 seconds.");
             await Task.Delay(1);
+        }
+    }
+
+    private sealed class Services(TimeProvider time, ILoggerFactory? loggers) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+            => serviceType == typeof(TimeProvider) ? time : serviceType == typeof(ILoggerFactory) ? loggers : null;
+    }
+
+    // The first call fails; the second signals Dispose to the stage, as a concurrent Dispose would, and throws.
+    private sealed class DisposesOnRetry : IDecisionClient
+    {
+        private int _calls;
+
+        public RetryingDecisionClient? Stage { get; set; }
+
+        public bool DisposeStage { get; init; } = true;
+
+        public ObjectDisposedException Thrown { get; } = new("inner");
+
+        public ValueTask<Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
+        {
+            if (_calls++ == 0)
+            {
+                return new(Fail(DecisionErrorKind.Server));
+            }
+
+            if (DisposeStage)
+            {
+                Stage!.Dispose();
+            }
+
+            throw Thrown;
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
         }
     }
 

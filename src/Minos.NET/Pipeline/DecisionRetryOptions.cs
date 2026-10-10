@@ -42,9 +42,9 @@ public sealed class DecisionRetryOptions
     };
 
     // The same rules and messages as DecisionClientOptions' retry settings: see RetrySettings.
-    internal void Validate()
+    internal void Validate(string paramName)
     {
-        RetrySettings.CheckShouldRetry(ShouldRetry, nameof(ShouldRetry));
-        RetrySettings.Check(MaxRetries, InitialBackoff, MaxRetryDelay, nameof(DecisionRetryOptions));
+        RetrySettings.CheckShouldRetry(ShouldRetry, paramName);
+        RetrySettings.Check(MaxRetries, InitialBackoff, MaxRetryDelay, paramName);
     }
 }

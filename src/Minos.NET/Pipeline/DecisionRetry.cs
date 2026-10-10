@@ -20,7 +20,7 @@ internal sealed class DecisionRetry
 
     public DecisionRetry(DecisionRetryOptions options, ILogger? logger, TimeProvider time, Func<bool> disposed)
     {
-        options.Validate();
+        options.Validate(nameof(options));
         _policy = new RetryPolicy(
             maxAttempts: options.MaxRetries + 1,
             backoffMs: (int)Math.Ceiling(options.InitialBackoff.TotalMilliseconds),
@@ -59,7 +59,30 @@ internal sealed class DecisionRetry
         CancellationToken ct)
     {
         var result = await first.ConfigureAwait(false);
-        for (var index = 0; WillRetry(result, index); index++)
+        return WillRetry(result, 0)
+            ? await ContinueAsync(result, state, attempt, ct).ConfigureAwait(false)
+            : result;
+    }
+
+    /// <summary>
+    /// Retries from a first failure the caller already judged retryable, so <c>ShouldRetry</c> runs once per failure.
+    /// </summary>
+    /// <typeparam name="TState">The state type.</typeparam>
+    /// <typeparam name="T">The success type.</typeparam>
+    /// <param name="failed">The first attempt's failure, for which <see cref="WillRetry"/> returned <see langword="true"/>.</param>
+    /// <param name="state">Passed to <paramref name="attempt"/>.</param>
+    /// <param name="attempt">Starts the attempt with the given 1-based retry number.</param>
+    /// <param name="ct">Cancels the waits; each attempt receives it too.</param>
+    /// <returns>The last attempt's result.</returns>
+    public async ValueTask<Result<T, DecisionError>> ContinueAsync<TState, T>(
+        Result<T, DecisionError> failed,
+        TState state,
+        Func<TState, int, CancellationToken, ValueTask<Result<T, DecisionError>>> attempt,
+        CancellationToken ct)
+    {
+        var result = failed;
+        var index = 0;
+        do
         {
             var error = result.Error;
             if (_logger is { } logger && logger.IsEnabled(LogLevel.Warning))
@@ -75,8 +98,19 @@ internal sealed class DecisionRetry
                 return Result<T, DecisionError>.Failure(DecisionErrorMapper.Disposed(null));
             }
 
-            result = await attempt(state, index + 1, ct).ConfigureAwait(false);
+            try
+            {
+                result = await attempt(state, index + 1, ct).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException exception) when (_disposed())
+            {
+                // Dispose landed after the check above: the inner client threw rather than answer.
+                return Result<T, DecisionError>.Failure(DecisionErrorMapper.Disposed(exception));
+            }
+
+            index++;
         }
+        while (WillRetry(result, index));
 
         return result;
     }

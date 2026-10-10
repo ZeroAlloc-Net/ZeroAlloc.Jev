@@ -47,7 +47,7 @@ public sealed class DecisionRetryOptionsTests
 
     [Fact]
     public void Defaults_are_valid()
-        => new DecisionRetryOptions().Validate();
+        => new DecisionRetryOptions().Validate("options");
 
     [Theory]
     [InlineData(-1, 500, 30000, "MaxRetries must be between 0 and 10.")]
@@ -64,10 +64,10 @@ public sealed class DecisionRetryOptionsTests
             MaxRetryDelay = TimeSpan.FromMilliseconds(maxDelayMs),
         };
 
-        var exception = Assert.Throws<ArgumentException>(options.Validate);
+        var exception = Assert.Throws<ArgumentException>(() => options.Validate("options"));
 
         Assert.StartsWith(message, exception.Message, StringComparison.Ordinal);
-        Assert.Equal("DecisionRetryOptions", exception.ParamName);
+        Assert.Equal("options", exception.ParamName);
     }
 
     [Fact]
@@ -75,9 +75,9 @@ public sealed class DecisionRetryOptionsTests
     {
         var options = new DecisionRetryOptions { ShouldRetry = null! };
 
-        var exception = Assert.Throws<ArgumentNullException>(options.Validate);
+        var exception = Assert.Throws<ArgumentNullException>(() => options.Validate("options"));
 
-        Assert.Equal("ShouldRetry", exception.ParamName);
+        Assert.Equal("options", exception.ParamName);
     }
 
     [Fact]
@@ -117,5 +117,26 @@ public sealed class DecisionRetryOptionsTests
         Assert.False(first.Jitter);
         first.MaxRetries = 1;
         Assert.Equal(4, client.GetService<DecisionRetryOptions>()!.MaxRetries);
+    }
+
+    [Fact]
+    public void The_stage_constructor_reports_the_options_parameter()
+    {
+        var inner = new OptionsOnly();
+
+        Assert.Equal("options", Assert.Throws<ArgumentException>(() => new RetryingDecisionClient(inner, new DecisionRetryOptions { MaxRetries = -1 })).ParamName);
+        Assert.Equal("options", Assert.Throws<ArgumentNullException>(() => new RetryingDecisionClient(inner, new DecisionRetryOptions { ShouldRetry = null! })).ParamName);
+    }
+
+    private sealed class OptionsOnly : IDecisionClient
+    {
+        public ValueTask<ZeroAlloc.Results.Result<DecisionResponse, DecisionError>> EvaluateAsync(DecisionRequest request, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
     }
 }

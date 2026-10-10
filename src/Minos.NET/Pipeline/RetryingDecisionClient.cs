@@ -45,7 +45,7 @@ public sealed class RetryingDecisionClient : DelegatingDecisionClient
         {
             var done = first.Result;
             return _retry.WillRetry(done, 0)
-                ? _retry.RunAsync(new ValueTask<Result<DecisionResponse, DecisionError>>(done), (InnerClient, request), Attempt, cancellationToken)
+                ? _retry.ContinueAsync(done, (InnerClient, request), Attempt, cancellationToken)
                 : new ValueTask<Result<DecisionResponse, DecisionError>>(done);
         }
 
